@@ -13,6 +13,7 @@ import { Timer } from './components/Timer';
 import { Village } from './components/Village';
 import { PixelAvatar } from './components/PixelAvatar';
 import { ActivityChart } from './components/ActivityChart';
+import { ProgressCard } from './components/ProgressCard';
 
 const navigation: { page: Page; icon: IconName; label: string }[] = [
   { page: 'focus', icon: 'focus', label: 'Мой фокус' },
@@ -207,6 +208,9 @@ export default function App() {
               <Icon name="refresh" size={15} />
             </button>
           </div>
+        )}
+        {user && page !== 'focus' && (
+          <ProgressCard user={user} demo={demo} loading={workspace.loading} />
         )}
         {workspace.loading && !user ? (
           <div className="card workspace-loading" role="status">

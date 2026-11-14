@@ -24,6 +24,18 @@ export interface User {
     collabSessionsCompleted: number;
     activeDays: number;
   };
+  progression?: {
+    level: number;
+    currentLevelXp: number;
+    nextLevelXp: number;
+    xpInLevel: number;
+    xpRequiredForLevel: number;
+    xpToNextLevel: number;
+    progressPercent: number;
+    focusXp: number;
+    focusCoins: number;
+    teamBonusPercent: number;
+  };
   settings: { allowPranks: boolean; timezone: string };
 }
 export interface AuthResponse {
@@ -80,6 +92,9 @@ export interface HistoryRecord {
   status: 'completed' | 'cancelled';
   plannedDurationSeconds: number;
   focusedSeconds: number;
+  xpEarned?: number;
+  coinsEarned?: number;
+  teamBonus?: boolean;
   startedAt: string;
   endedAt: string;
   createdAt: string;

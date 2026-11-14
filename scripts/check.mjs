@@ -216,6 +216,102 @@ try {
     assert.ok(!invitation.includes('Передать права'));
   });
   window.location.search = '';
+  const { ProgressCard } = await vite.ssrLoadModule('/src/components/ProgressCard.tsx');
+  const player = {
+    username: 'Alice',
+    stats: { xp: 125, coins: 50, level: 2, sessionsCompleted: 5, activeDays: 2 },
+    progression: {
+      level: 2,
+      xpInLevel: 25,
+      xpRequiredForLevel: 200,
+      xpToNextLevel: 175,
+      progressPercent: 12,
+      focusXp: 25,
+      focusCoins: 10,
+      teamBonusPercent: 20,
+    },
+  };
+  check('player progress renders server level, wallet and accessible XP thresholds', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProgressCard, { user: player, demo: false, loading: false }),
+    );
+    assert.ok(html.includes('Уровень 2'));
+    assert.ok(html.includes('25 / 200 XP'));
+    assert.ok(html.includes('175 XP до уровня 3'));
+    assert.ok(html.includes('Всего 125 XP'));
+    assert.ok(html.includes('aria-valuenow="25"'));
+    assert.ok(html.includes('aria-valuemax="200"'));
+    assert.ok(html.includes('50</strong>'));
+  });
+  check('demo never presents sample history as earned account progress', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProgressCard, { user: player, demo: true, loading: false }),
+    );
+    assert.ok(html.includes('Войди и завершай Focus'));
+    assert.ok(!html.includes('role="progressbar"'));
+    assert.ok(!html.includes('Уровень 2'));
+  });
+  check('old backend without progression gets an explicit unavailable state', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ProgressCard, {
+        user: { ...player, progression: undefined },
+        demo: false,
+        loading: false,
+      }),
+    );
+    assert.ok(html.includes('Прогресс пока недоступен'));
+    assert.ok(!html.includes('role="progressbar"'));
+  });
+  const { History } = await vite.ssrLoadModule('/src/components/History.tsx');
+  check('history renders actual reward receipt, team bonus and zero for unawarded sessions', () => {
+    const workspace = {
+      demo: false,
+      filter: { period: 'all', status: '', offset: 0 },
+      setFilter() {},
+      refresh() {},
+      historyStats: {
+        totalSessions: 2,
+        completedSessions: 1,
+        cancelledSessions: 1,
+        totalFocusedSeconds: 1500,
+      },
+      historyPage: {
+        total: 2,
+        items: [
+          {
+            id: 'rewarded',
+            roomName: 'Garden',
+            status: 'completed',
+            plannedDurationSeconds: 1500,
+            focusedSeconds: 1500,
+            startedAt: '2026-11-15T10:00:00Z',
+            endedAt: '2026-11-15T10:25:00Z',
+            xpEarned: 30,
+            coinsEarned: 12,
+            teamBonus: true,
+          },
+          {
+            id: 'cancelled',
+            status: 'cancelled',
+            plannedDurationSeconds: 1500,
+            focusedSeconds: 0,
+            startedAt: '2026-11-15T11:00:00Z',
+            endedAt: '2026-11-15T11:00:00Z',
+            xpEarned: 0,
+            coinsEarned: 0,
+          },
+        ],
+      },
+      historyRooms: [],
+      week: [],
+      historyLoading: false,
+    };
+    const html = renderToStaticMarkup(React.createElement(History, { workspace }));
+    assert.ok(html.includes('+30 XP'));
+    assert.ok(html.includes('+12 монет'));
+    assert.ok(html.includes('Командный бонус'));
+    assert.ok(html.includes('нет начисленной награды'));
+  });
   console.log(`\n${checks} frontend checks passed.`);
 } finally {
   globalThis.window = originalWindow;

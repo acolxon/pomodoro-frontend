@@ -116,6 +116,12 @@ export function useWorkspace() {
     setMembershipLoading(true);
     setMembershipRevision((value) => value + 1);
   }, []);
+  const progressBaseline = useRef<{
+    token: string;
+    xp: number;
+    coins: number;
+    level: number;
+  } | null>(null);
 
   const notify = useCallback((message: string, kind: Notice['kind'] = 'success') => {
     setNotices((current) => [
@@ -191,6 +197,15 @@ export function useWorkspace() {
     ])
       .then(([profile, items]) => {
         if (!controller.signal.aborted && currentToken.current === token) {
+          const previous = progressBaseline.current;
+          if (previous?.token === token && profile.stats.xp > previous.xp) {
+            const levelUp =
+              profile.stats.level > previous.level ? ` Новый уровень: ${profile.stats.level}!` : '';
+            notify(
+              `Награда за фокус: +${profile.stats.xp - previous.xp} XP, +${Math.max(0, profile.stats.coins - previous.coins)} монет.${levelUp}`,
+            );
+          }
+          progressBaseline.current = { token, ...profile.stats };
           setUser(profile);
           setTasks(items);
         }
@@ -203,7 +218,7 @@ export function useWorkspace() {
         if (!controller.signal.aborted && currentToken.current === token) setLoading(false);
       });
     return () => controller.abort();
-  }, [token, revision]);
+  }, [token, revision, notify]);
 
   // One read on login, explicit refresh, or membership events; no interval polling.
   useEffect(() => {
@@ -299,6 +314,7 @@ export function useWorkspace() {
     client.on('realtime:ready', () => {
       ready = true;
       requestMembership();
+      refresh();
       join();
     });
     client.on('room:updated', () => {
@@ -362,6 +378,7 @@ export function useWorkspace() {
     const visible = () => {
       if (document.visibilityState === 'visible' && client.connected && ready) {
         requestMembership();
+        refresh();
         join();
       }
     };

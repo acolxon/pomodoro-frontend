@@ -168,6 +168,7 @@ export function History({ workspace }: { workspace: Workspace }) {
                     <th scope="col">Дата и время</th>
                     <th scope="col">В фокусе</th>
                     <th scope="col">Результат</th>
+                    <th scope="col">Награда</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -224,6 +225,25 @@ export function History({ workspace }: { workspace: Workspace }) {
                           <Icon name={record.status === 'completed' ? 'check' : 'stop'} size={13} />
                           {record.status === 'completed' ? 'Завершена' : 'Отменена'}
                         </span>
+                      </td>
+                      <td className="history-reward">
+                        {(record.xpEarned ?? 0) > 0 ? (
+                          <>
+                            <strong>+{record.xpEarned} XP</strong>
+                            <span>+{record.coinsEarned} монет</span>
+                            {record.teamBonus && <small>Командный бонус</small>}
+                          </>
+                        ) : (
+                          <span
+                            title={
+                              workspace.demo
+                                ? 'В локальном демо награды не начисляются'
+                                : 'Для этой сессии нет начисленной награды'
+                            }
+                          >
+                            —
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

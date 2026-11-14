@@ -2570,3 +2570,171 @@ textarea {
   width: 100%;
   font-size: 11px;
 }
+
+.player-progress,
+.progress-preview {
+  margin: 0 0 24px;
+  padding: 22px 26px;
+  background: linear-gradient(110deg, #fff9e9, #f1f2d9);
+}
+.player-progress {
+  display: grid;
+  grid-template-columns: minmax(175px, 1fr) minmax(200px, 2fr) auto auto;
+  gap: 20px 28px;
+  align-items: center;
+}
+.player-identity,
+.progress-preview,
+.player-wallet,
+.xp-label strong {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.player-identity > .pixel-avatar {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+}
+.player-identity h2 {
+  overflow-wrap: anywhere;
+  margin: 3px 0 5px;
+}
+.level-tag {
+  font-size: 12px;
+  font-weight: 800;
+  color: #486235;
+  background: #e1e7bd;
+  padding: 3px 8px;
+  border: 1px solid #b7c38d;
+}
+.xp-label,
+.xp-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.xp-label {
+  font-size: 12px;
+  margin-bottom: 9px;
+}
+.xp-label strong {
+  color: var(--green);
+  gap: 5px;
+}
+.xp-track {
+  height: 15px;
+  border: 2px solid #86734b;
+  background: #ddd4b4;
+  box-shadow: inset 0 2px #b6ab86;
+  padding: 2px;
+}
+.xp-track > span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  background: repeating-linear-gradient(90deg, #7c9f4c 0 12px, #8caf59 12px 14px);
+  box-shadow: inset 0 2px #b7ce84;
+  transition: width 0.4s ease;
+}
+.xp-caption {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.player-wallet strong {
+  font-size: 24px;
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.player-wallet div > span,
+.player-milestones {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pixel-coin {
+  width: 24px;
+  height: 28px;
+  display: inline-block;
+  flex-shrink: 0;
+  border: 3px solid #a0712a;
+  background: #edbd56;
+  box-shadow:
+    inset 3px 3px #ffe49a,
+    inset -3px -3px #cf963d,
+    3px 0 #c19344;
+}
+.player-milestones {
+  display: grid;
+  gap: 8px;
+}
+.player-milestones strong {
+  color: var(--ink);
+}
+.progress-reward-rule {
+  grid-column: 1 / -1;
+  border-top: 1px dashed #ccbf96;
+  padding-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.progress-preview p {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.progress-emblem {
+  padding: 12px;
+  color: var(--green);
+  border: 2px solid #a9ba7e;
+  background: #e8edcd;
+}
+.history-reward strong,
+.history-reward > span,
+.history-reward small {
+  display: block;
+}
+.history-reward strong {
+  color: var(--green);
+  font-size: 13px;
+}
+.history-reward > span,
+.history-reward small {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+@media (max-width: 1000px) {
+  .player-progress {
+    grid-template-columns: minmax(150px, 1fr) minmax(200px, 2fr) auto;
+  }
+  .player-milestones {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+}
+@media (max-width: 600px) {
+  .player-progress {
+    padding: 18px;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+  }
+  .player-experience {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .progress-preview {
+    padding: 18px;
+  }
+  .progress-preview h2 {
+    font-size: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xp-track > span {
+    transition: none;
+  }
+}
