@@ -75,6 +75,7 @@ export interface HistoryRecord {
   taskId: string | null;
   taskTitle: string | null;
   roomId: string | null;
+  roomName?: string | null;
   pomodoroSessionId: string;
   status: 'completed' | 'cancelled';
   plannedDurationSeconds: number;
@@ -96,9 +97,16 @@ export interface HistoryPage {
   total: number;
 }
 export interface HistoryFilter {
-  period: 'all' | 'today' | 'week' | 'month';
+  period: 'all' | 'today' | 'week' | 'month' | 'custom';
   status: '' | 'completed' | 'cancelled';
   offset: number;
+  roomId?: string;
+  from?: string;
+  to?: string;
+}
+export interface HistoryRoom {
+  id: string;
+  name: string | null;
 }
 export interface Notice {
   id: number;

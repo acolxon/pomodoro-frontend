@@ -73,6 +73,55 @@ try {
     assert.equal(day.getMinutes(), 0);
   });
 
+  check('custom date range includes the whole final local day and carries room filter', () => {
+    const params = utils.historyParams({
+      period: 'custom',
+      from: '2026-11-01',
+      to: '2026-11-14',
+      roomId: 'room-1',
+      status: '',
+      offset: 0,
+    });
+    assert.equal(params.get('from'), new Date(2026, 10, 1).toISOString());
+    assert.equal(params.get('to'), new Date(2026, 10, 15).toISOString());
+    assert.equal(params.get('roomId'), 'room-1');
+    assert.equal(params.has('offset'), false);
+  });
+  check('invalid and reversed date ranges are rejected before API requests', () => {
+    assert.ok(utils.historyFilterError({ period: 'custom', from: '2026-11-15', to: '2026-11-14' }));
+    assert.ok(utils.historyFilterError({ period: 'custom', from: '2026-02-31' }));
+    assert.ok(utils.historyFilterError({ period: 'custom', to: 'garbage' }));
+    assert.equal(
+      utils.historyFilterError({ period: 'custom', from: '2026-11-14', to: '2026-11-14' }),
+      null,
+    );
+    assert.equal(utils.historyFilterError({ period: 'week', from: 'garbage' }), null);
+  });
+  const { villagers, sampleRoute } = await vite.ssrLoadModule('/src/lib/village.ts');
+  check('village routes pause at workstations and walk continuously without teleports', () => {
+    for (const villager of villagers) {
+      const start = sampleRoute(villager, -villager.offset);
+      assert.equal(start.walking, false);
+      assert.equal(start.activity, villager.route[0].activity);
+      assert.equal(start.x, villager.route[0].x);
+      const after = sampleRoute(villager, villager.route[0].wait + 1 - villager.offset);
+      assert.equal(after.walking, true);
+      assert.ok(
+        Math.abs(Math.hypot(after.x - start.x, after.y - start.y) - villager.speed) < 0.001,
+      );
+      let previous = start;
+      for (let seconds = 0.1; seconds <= 200; seconds += 0.1) {
+        const pose = sampleRoute(villager, seconds - villager.offset);
+        assert.ok(
+          Math.hypot(pose.x - previous.x, pose.y - previous.y) <= villager.speed * 0.1 + 0.001,
+        );
+        assert.ok(pose.x >= 0 && pose.x <= 768 && pose.y >= 0 && pose.y <= 448);
+        assert.ok(pose.direction >= 0 && pose.direction <= 3);
+        previous = pose;
+      }
+    }
+  });
+
   const { api, ApiError } = await vite.ssrLoadModule('/src/lib/api.ts');
   let request;
   globalThis.fetch = async (url, options) => {

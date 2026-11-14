@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
 import { clock, remaining } from '../lib/utils';
-import { Icon } from './Icon';
+import { Icon, TomatoMark } from './Icon';
 import { ConfirmModal } from './Modal';
+const digits: Record<string, string[]> = {
+  '0': ['11111', '10001', '10011', '10101', '11001', '10001', '11111'],
+  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
+  '2': ['11111', '00001', '00001', '11111', '10000', '10000', '11111'],
+  '3': ['11111', '00001', '00001', '01111', '00001', '00001', '11111'],
+  '4': ['10001', '10001', '10001', '11111', '00001', '00001', '00001'],
+  '5': ['11111', '10000', '10000', '11111', '00001', '00001', '11111'],
+  '6': ['11111', '10000', '10000', '11111', '10001', '10001', '11111'],
+  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
+  '8': ['11111', '10001', '10001', '11111', '10001', '10001', '11111'],
+  '9': ['11111', '10001', '10001', '11111', '00001', '00001', '11111'],
+  ':': ['00000', '00100', '00100', '00000', '00100', '00100', '00000'],
+};
+
 export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () => void }) {
   const [now, setNow] = useState(Date.now());
   const [cancel, setCancel] = useState(false);
@@ -31,67 +45,64 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
   }, [running, paused, seconds, isBreak]);
   return (
     <section
-      className={`card timer-card ${isBreak ? 'break-time' : ''}`}
+      className={`timer-card ${isBreak ? 'break-time' : ''}`}
       aria-label="Общий Pomodoro-таймер"
     >
-      <div className="timer-top">
-        <span className="timer-phase">
-          <Icon name={isBreak ? 'coffee' : 'leaf'} size={16} />
-          {isBreak ? 'Время выдохнуть' : 'Режим глубокого фокуса'}
-        </span>
-        <span className={`live-badge ${paused ? 'paused' : running ? 'running' : ''}`}>
-          <span className="tiny-dot" />
-          {paused ? 'На паузе' : running ? 'Сессия идёт' : 'Без спешки'}
-        </span>
-      </div>
-      <div className="phase-pills" aria-label="Режим таймера">
-        <span className={!isBreak ? 'selected' : ''}>
-          <Icon name="focus" size={15} />
-          Фокус <small>25 мин</small>
-        </span>
-        <span className={isBreak ? 'selected' : ''}>
-          <Icon name="coffee" size={15} />
-          Перерыв <small>5 мин</small>
-        </span>
-      </div>
-      <div className="timer-dial">
-        <svg className="timer-ring" viewBox="0 0 320 320" aria-hidden="true">
-          <circle className="ring-track" cx="160" cy="160" r="145" />
+      <div className="wooden-timer">
+        <div className="wood-nail nail-one" />
+        <div className="wood-nail nail-two" />
+        <div className="wood-nail nail-three" />
+        <div className="wood-nail nail-four" />
+        <div className="timer-crest">
+          <TomatoMark size={42} />
+        </div>
+        <svg className="timer-ring" viewBox="0 0 280 280" aria-hidden="true">
+          <circle className="ring-track" cx="140" cy="140" r="127" />
           <circle
             className="ring-progress"
-            cx="160"
-            cy="160"
-            r="145"
+            cx="140"
+            cy="140"
+            r="127"
             pathLength="100"
             strokeDasharray="100"
             strokeDashoffset={100 - Math.min(1, fraction) * 100}
           />
         </svg>
         <div className="timer-face">
-          <span className="timer-eyebrow">
-            {isBreak ? 'СМЕНИ ОБСТАНОВКУ' : paused ? 'МОЖНО ПЕРЕВЕСТИ ДУХ' : 'ВРЕМЯ ДЛЯ ВАЖНОГО'}
+          <span className={`live-badge ${paused ? 'paused' : running ? 'running' : ''}`}>
+            <span className="tiny-dot" />
+            {paused ? 'НА ПАУЗЕ' : running ? 'СЕССИЯ ИДЁТ' : 'ТВОЁ ВРЕМЯ'}
           </span>
           <span className="timer-digits" aria-label={`Осталось ${clock(seconds)}`} role="timer">
-            {clock(seconds)}
+            <svg viewBox="0 0 29 7" aria-hidden="true" shapeRendering="crispEdges">
+              {[...clock(seconds)].flatMap((character, i) =>
+                digits[character].flatMap((row, y) =>
+                  [...row].map((pixel, x) =>
+                    pixel === '1' ? (
+                      <rect key={`${i}-${x}-${y}`} x={i * 6 + x} y={y} width="1" height="1" />
+                    ) : null,
+                  ),
+                ),
+              )}
+            </svg>
+          </span>
+          <span className="timer-phase">
+            <Icon name={isBreak ? 'coffee' : 'focus'} size={18} />
+            {isBreak ? 'Перерыв' : 'Фокус'}
           </span>
           <span className="timer-caption">
             {isBreak
-              ? 'Потянись. Вдохни. Отдохни.'
-              : running
-                ? 'Сейчас только ты и одна задача.'
-                : paused
-                  ? 'Продолжишь, когда будешь готов.'
-                  : 'Одна задача. Один маленький шаг.'}
-          </span>
-          <span className="timer-decoration">
-            <Icon name={isBreak ? 'coffee' : 'leaf'} size={22} />
+              ? 'Выдохни. Ты хорошо поработал.'
+              : paused
+                ? 'Вернись, когда будешь готов.'
+                : 'Одна задача. Один маленький шаг.'}
           </span>
         </div>
       </div>
       <div className="timer-controls">
         {!room ? (
           <button className="button primary timer-start" onClick={onRoom}>
-            <Icon name="users" size={18} />
+            <Icon name="users" size={19} />
             Создать комнату
           </button>
         ) : (
@@ -103,10 +114,10 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
                 void workspace.command(running ? 'pause' : paused ? 'resume' : 'start')
               }
             >
-              <Icon name={running ? 'pause' : 'play'} size={18} />
+              <Icon name={running ? 'pause' : 'play'} size={19} />
               {busy ? 'Подождите…' : running ? 'Пауза' : paused ? 'Продолжить' : 'Начать фокус'}
             </button>
-            {timer?.status !== 'idle' && (
+            {timer && timer.status !== 'idle' && (
               <button
                 className="button secondary timer-stop"
                 aria-label="Отменить текущую сессию"
@@ -114,7 +125,7 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
                 disabled={!owner || !connected || busy}
                 onClick={() => setCancel(true)}
               >
-                <Icon name="stop" size={18} />
+                <Icon name="stop" size={19} />
               </button>
             )}
           </>
@@ -122,35 +133,25 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
       </div>
       <p className="timer-undertext">
         {!room ? (
-          'Комната нужна даже для работы в одиночку.'
+          'Создай свою первую комнату'
         ) : !connected ? (
           <button className="text-button" onClick={workspace.reconnect}>
-            Нет связи с комнатой. Переподключиться
+            Нет связи · подключиться снова
           </button>
         ) : !owner ? (
-          'Таймером управляет владелец комнаты.'
-        ) : timer?.status === 'idle' ? (
-          <>
-            После фокуса — 5 минут отдыха <span>↗</span>
-          </>
+          'Таймером управляет владелец'
         ) : isBreak ? (
-          'Твой результат уже сохранён в истории.'
+          'Результат сохранён. Время отдохнуть.'
         ) : (
-          'Паузы не учитываются во времени фокуса.'
+          '25 минут фокуса → 5 минут отдыха'
         )}
       </p>
       <div className="current-task">
-        <span className="current-task-icon">
-          <Icon name="target" size={17} />
+        <Icon name="target" size={16} />
+        <span>
+          {timer?.phase === 'focus' && timer.status !== 'idle' ? 'Следом: ' : ''}
+          {active?.title || 'Фокус без выбранной задачи'}
         </span>
-        <div>
-          <span>
-            {timer?.phase === 'focus' && timer.status !== 'idle'
-              ? 'ВЫБОР ДЛЯ СЛЕДУЮЩЕЙ СЕССИИ'
-              : 'ЗАДАЧА ДЛЯ ФОКУСА'}
-          </span>
-          <p>{active?.title || 'Можно начать и без задачи'}</p>
-        </div>
       </div>
       {cancel && (
         <ConfirmModal

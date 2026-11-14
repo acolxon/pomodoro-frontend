@@ -1,8 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
 import { Icon, TomatoMark } from './Icon';
-import { Modal } from './Modal';
-export function AuthModal({ workspace, onClose }: { workspace: Workspace; onClose: () => void }) {
+import { Modal, useModalTransition } from './Modal';
+export function AuthModal({
+  workspace,
+  onClose: close,
+}: {
+  workspace: Workspace;
+  onClose: () => void;
+}) {
+  const { closing, onClose } = useModalTransition(close);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [visible, setVisible] = useState(false);
   const busy = workspace.pending.includes('auth');
@@ -29,6 +36,7 @@ export function AuthModal({ workspace, onClose }: { workspace: Workspace; onClos
           : 'Создай аккаунт и собери своё пространство для работы.'
       }
       onClose={onClose}
+      closing={closing}
       busy={busy}
       className="auth-modal"
     >

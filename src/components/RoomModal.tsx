@@ -1,17 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
-import { initials } from '../lib/utils';
+import { PixelAvatar } from './PixelAvatar';
 import { Icon } from './Icon';
-import { ConfirmModal, Modal } from './Modal';
+import { ConfirmModal, Modal, useModalTransition } from './Modal';
 export function RoomModal({
   workspace,
-  onClose,
+  onClose: close,
   onAuth,
 }: {
   workspace: Workspace;
   onClose: () => void;
   onAuth: () => void;
 }) {
+  const { closing, onClose } = useModalTransition(close);
   const [tab, setTab] = useState<'create' | 'join'>('create');
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState(6);
@@ -76,6 +77,7 @@ export function RoomModal({
           : 'Создай своё пространство или присоединись по приглашению.'
       }
       onClose={onClose}
+      closing={closing}
       busy={busy}
     >
       {room ? (
@@ -114,7 +116,7 @@ export function RoomModal({
           <div className="member-list">
             {members.map((member, index) => (
               <div className="member-row" key={member.userId}>
-                <span className={`avatar color-${index % 4}`}>{initials(member.username)}</span>
+                <PixelAvatar name={member.username} index={index} />
                 <div className="member-name">
                   <strong>
                     {member.username}

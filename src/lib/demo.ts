@@ -92,6 +92,7 @@ export function demoHistory(): HistoryRecord[] {
         'Разобрать заметки и идеи',
       ][index % 3],
       roomId: 'demo-room',
+      roomName: 'Тихая комната',
       pomodoroSessionId: `demo-run-${index}`,
       status: focusedSeconds === 1500 ? 'completed' : 'cancelled',
       plannedDurationSeconds: 1500,

@@ -5,7 +5,7 @@ import { demoHistory, demoMembers, demoRoom, demoTasks, demoUser } from '../lib/
 import {
   emptyStats,
   errorText,
-  filterFrom,
+  historyFilterError,
   historyParams,
   remaining,
   summarize,
@@ -15,6 +15,7 @@ import {
   type AuthResponse,
   type Command,
   type HistoryFilter,
+  type HistoryRoom,
   type HistoryPage,
   type HistoryRecord,
   type HistoryStats,
@@ -83,6 +84,8 @@ export function useWorkspace() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyRooms, setHistoryRooms] = useState<HistoryRoom[]>([]);
+  const [historyRoomsError, setHistoryRoomsError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState<string[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -143,6 +146,7 @@ export function useWorkspace() {
     setConnection('demo');
     setClockOffset(0);
     setRecords(demoHistory());
+    setFilter({ period: 'week', status: '', offset: 0 });
     setLoadError(null);
     demoRun.current = null;
     previousTimer.current = null;
@@ -301,13 +305,23 @@ export function useWorkspace() {
 
   // History and its totals use the same filters; dashboard totals always cover the current week.
   useEffect(() => {
+    const invalid = historyFilterError(filter);
+    if (invalid) {
+      setHistoryError(invalid);
+      setHistoryLoading(false);
+      return;
+    }
+    const params = historyParams(filter);
     if (demo) {
-      const from = filterFrom(filter.period);
+      const from = params.get('from');
+      const to = params.get('to');
       const filtered = records
         .filter(
           (record) =>
             (!filter.status || record.status === filter.status) &&
-            (!from || record.startedAt >= from),
+            (!filter.roomId || record.roomId === filter.roomId) &&
+            (!from || record.startedAt >= from) &&
+            (!to || record.startedAt < to),
         )
         .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       setHistoryPage({
@@ -322,7 +336,6 @@ export function useWorkspace() {
     const controller = new AbortController();
     setHistoryLoading(true);
     setHistoryError(null);
-    const params = historyParams(filter);
     const pageParams = new URLSearchParams(params);
     pageParams.set('limit', String(HISTORY_LIMIT));
     pageParams.set('offset', String(filter.offset));
@@ -345,6 +358,35 @@ export function useWorkspace() {
       });
     return () => controller.abort();
   }, [demo, token, filter, revision, records]);
+
+  useEffect(() => {
+    setHistoryRoomsError(null);
+    if (demo) {
+      const rooms = new Map<string, HistoryRoom>();
+      records.forEach((record) => {
+        if (record.roomId)
+          rooms.set(record.roomId, { id: record.roomId, name: record.roomName ?? null });
+      });
+      setHistoryRooms([...rooms.values()]);
+      return;
+    }
+    const controller = new AbortController();
+    api<HistoryRoom[]>('/history/rooms', token, { signal: controller.signal })
+      .then((items) => {
+        if (!controller.signal.aborted && currentToken.current === token) setHistoryRooms(items);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted && currentToken.current === token) {
+          setHistoryRooms([]);
+          setHistoryRoomsError(
+            error instanceof ApiError && error.status === 404
+              ? 'Фильтр комнат недоступен: обновите backend до последней версии.'
+              : errorText(error),
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [demo, token, revision, records]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -447,6 +489,8 @@ export function useWorkspace() {
         setWeek([]);
         setHistoryPage({ items: [], total: 0 });
         setHistoryStats(emptyStats);
+        setHistoryRooms([]);
+        setFilter({ period: 'week', status: '', offset: 0 });
         setToken(result.accessToken);
         setLoading(true);
         setLoadError(null);
@@ -636,6 +680,7 @@ export function useWorkspace() {
         taskId: selected.taskId,
         taskTitle: selected.taskTitle,
         roomId: state.roomId,
+        roomName: room?.name ?? null,
         pomodoroSessionId: selected.id,
         status,
         plannedDurationSeconds: selected.planned,
@@ -776,6 +821,8 @@ export function useWorkspace() {
     historyLoading,
     loadError,
     historyError,
+    historyRooms,
+    historyRoomsError,
     actionErrors,
     clearActionError,
     pending,

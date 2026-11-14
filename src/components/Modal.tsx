@@ -1,5 +1,19 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Icon } from './Icon';
+export function useModalTransition(close: () => void) {
+  const [closing, setClosing] = useState(false);
+  const timeout = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timeout.current), []);
+  const onClose = useCallback(() => {
+    if (timeout.current !== undefined) return;
+    setClosing(true);
+    timeout.current = window.setTimeout(
+      close,
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150,
+    );
+  }, [close]);
+  return { closing, onClose };
+}
 export function Modal({
   title,
   subtitle,
@@ -7,6 +21,7 @@ export function Modal({
   children,
   busy = false,
   className = '',
+  closing = false,
 }: {
   title: string;
   subtitle?: string;
@@ -14,6 +29,7 @@ export function Modal({
   children: ReactNode;
   busy?: boolean;
   className?: string;
+  closing?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useRef(`modal-${crypto.randomUUID()}`).current;
@@ -32,21 +48,21 @@ export function Modal({
   return (
     <dialog
       ref={dialog}
-      className={`modal ${className}`}
+      className={`modal ${className} ${closing ? 'closing' : ''}`}
       aria-labelledby={titleId}
       onCancel={(event) => {
         event.preventDefault();
-        if (!busy) onClose();
+        if (!busy && !closing) onClose();
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
+        if (event.target === event.currentTarget && !busy && !closing) onClose();
       }}
     >
       <div className="modal-inner">
         <button
           className="icon-button modal-close"
           aria-label="Закрыть окно"
-          disabled={busy}
+          disabled={busy || closing}
           onClick={onClose}
         >
           <Icon name="close" />
@@ -63,7 +79,7 @@ export function ConfirmModal({
   description,
   label,
   busy,
-  onClose,
+  onClose: close,
   onConfirm,
   error,
 }: {
@@ -75,8 +91,9 @@ export function ConfirmModal({
   onConfirm: () => void;
   error?: string;
 }) {
+  const { closing, onClose } = useModalTransition(close);
   return (
-    <Modal title={title} onClose={onClose} busy={busy}>
+    <Modal title={title} onClose={onClose} busy={busy} closing={closing}>
       <p className="confirm-description">{description}</p>
       {error && (
         <p className="form-error" role="alert">

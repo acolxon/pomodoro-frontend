@@ -2,16 +2,17 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
 import type { Task } from '../lib/types';
 import { Icon } from './Icon';
-import { Modal } from './Modal';
+import { Modal, useModalTransition } from './Modal';
 export function TaskEditor({
   task,
   workspace,
-  onClose,
+  onClose: close,
 }: {
   task: Task | null;
   workspace: Workspace;
   onClose: () => void;
 }) {
+  const { closing, onClose } = useModalTransition(close);
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const busy = workspace.pending.includes('task-save');
@@ -32,6 +33,7 @@ export function TaskEditor({
       title={task ? 'Немного ясности.' : 'Что хочется сделать?'}
       subtitle="Небольшая конкретная задача — хорошее начало."
       onClose={onClose}
+      closing={closing}
       busy={busy}
     >
       <form onSubmit={submit} className="form-stack">

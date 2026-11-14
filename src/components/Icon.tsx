@@ -186,8 +186,8 @@ export function Icon({
       fill="none"
       stroke="currentColor"
       strokeWidth="1.65"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeLinecap="square"
+      strokeLinejoin="miter"
       aria-hidden="true"
       className={className}
       style={style}
@@ -198,12 +198,20 @@ export function Icon({
 }
 export function TomatoMark({ size = 32 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" aria-hidden="true">
-      <path
-        d="M20 12C10 3 0 16 5 28c3 9 12 9 15 8 4 1 13 1 16-8 4-12-6-25-16-16Z"
-        fill="currentColor"
-      />
-      <path d="m20 15-8-6 7 1 3-7 1 7 7-1-8 6" fill="#405345" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 22"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      <path d="M7 5H4v2H2v3H1v7h2v3h3v1h8v-1h3v-3h2v-7h-1V7h-3V5Z" fill="#523c2e" />
+      <path d="M7 6H4v2H3v3H2v5h2v3h3v1h6v-1h3v-3h2v-5h-1V8h-3V6Z" fill="#c55636" />
+      <path d="M5 8h4v2h4v7h-2v2H6v-2H4v-6h1Z" fill="#df7041" />
+      <path d="M5 10h2v4H4v-2h1Z" fill="#f8b16d" />
+      <path d="M15 11h2v6h-2v2h-3v-1h2v-2h1Z" fill="#9e452f" />
+      <path d="M10 1h2v4h4v2h-4v2H9V7H5V5h4V3h1Z" fill="#344e35" />
+      <path d="M10 3h1v3h3v1h-4v1H9V6H7V5h3Z" fill="#7b9b47" />
     </svg>
   );
 }

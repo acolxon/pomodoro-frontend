@@ -2,6 +2,7 @@ import type { Workspace } from '../hooks/useWorkspace';
 import { HISTORY_LIMIT } from '../lib/types';
 import { dateLabel, duration } from '../lib/utils';
 import { Icon } from './Icon';
+import { ActivityChart } from './ActivityChart';
 export function History({ workspace }: { workspace: Workspace }) {
   const {
     filter,
@@ -10,42 +11,46 @@ export function History({ workspace }: { workspace: Workspace }) {
     historyPage: page,
     historyLoading,
     historyError,
+    historyRooms,
+    historyRoomsError,
   } = workspace;
+  const unavailable = historyLoading || !!historyError;
   return (
     <>
-      <div className="history-stats">
-        <div className="card history-stat">
-          <span className="stat-icon green">
-            <Icon name="clock" />
-          </span>
-          <span className="eyebrow">ВРЕМЯ В ФОКУСЕ</span>
-          <strong>{duration(stats.totalFocusedSeconds)}</strong>
-          <span className="muted">За выбранный период</span>
+      <div className="history-overview">
+        <div className="history-stats" aria-busy={historyLoading}>
+          <div className="card history-stat">
+            <span className="stat-icon sand">
+              <Icon name="history" />
+            </span>
+            <span className="eyebrow">ВСЕГО СЕССИЙ</span>
+            <strong>{unavailable ? '—' : stats.totalSessions}</strong>
+            <span className="muted">За выбранный период</span>
+          </div>
+          <div className="card history-stat">
+            <span className="stat-icon green">
+              <Icon name="clock" />
+            </span>
+            <span className="eyebrow">ВРЕМЯ В ФОКУСЕ</span>
+            <strong>{unavailable ? '—' : duration(stats.totalFocusedSeconds)}</strong>
+            <span className="muted">Включая время до отмены</span>
+          </div>
+          <div className="card history-stat">
+            <span className="stat-icon peach">
+              <Icon name="check" />
+            </span>
+            <span className="eyebrow">ЗАВЕРШЕНО</span>
+            <strong>{unavailable ? '—' : stats.completedSessions}</strong>
+            <span className="muted">Отменено: {unavailable ? '—' : stats.cancelledSessions}</span>
+          </div>
         </div>
-        <div className="card history-stat">
-          <span className="stat-icon peach">
-            <Icon name="check" />
-          </span>
-          <span className="eyebrow">ЗАВЕРШЕНО</span>
-          <strong>
-            {stats.completedSessions}
-            <small> сессий</small>
-          </strong>
-          <span className="muted">Каждый шаг имеет значение</span>
-        </div>
-        <div className="card history-stat">
-          <span className="stat-icon sand">
-            <Icon name="focus" />
-          </span>
-          <span className="eyebrow">СРЕДНИЙ ФОКУС</span>
-          <strong>{duration(stats.averageFocusedSeconds)}</strong>
-          <span className="muted">Отменённых сессий: {stats.cancelledSessions}</span>
-        </div>
+        <ActivityChart workspace={workspace} />
       </div>
       <section className="card history-card">
         <div className="card-heading">
           <h2>
-            Твои сессии<span className="count-badge">{page.total}</span>
+            <Icon name="history" size={21} />
+            Твои сессии<span className="count-badge">{historyLoading ? '…' : page.total}</span>
           </h2>
           <button
             className="icon-button"
@@ -57,37 +62,91 @@ export function History({ workspace }: { workspace: Workspace }) {
           </button>
         </div>
         <div className="history-toolbar">
-          <div className="segmented">
-            {(['all', 'today', 'week', 'month'] as const).map((period, index) => (
+          <div className="segmented" aria-label="Период истории">
+            {(['all', 'today', 'week', 'month', 'custom'] as const).map((period, i) => (
               <button
+                aria-pressed={filter.period === period}
                 className={filter.period === period ? 'selected' : ''}
                 onClick={() => setFilter({ ...filter, period, offset: 0 })}
                 key={period}
               >
-                {['Всё время', 'Сегодня', '7 дней', '30 дней'][index]}
+                {['Всё время', 'Сегодня', '7 дней', '30 дней', 'Свои даты'][i]}
               </button>
             ))}
           </div>
-          <select
-            aria-label="Фильтр по результату сессии"
-            value={filter.status}
-            onChange={(event) =>
-              setFilter({
-                ...filter,
-                status: event.target.value as typeof filter.status,
-                offset: 0,
-              })
-            }
-          >
-            <option value="">Все результаты</option>
-            <option value="completed">Завершённые</option>
-            <option value="cancelled">Отменённые</option>
-          </select>
+          <div className="history-selects">
+            <label>
+              Результат
+              <select
+                value={filter.status}
+                onChange={(event) =>
+                  setFilter({
+                    ...filter,
+                    status: event.target.value as typeof filter.status,
+                    offset: 0,
+                  })
+                }
+              >
+                <option value="">Все результаты</option>
+                <option value="completed">Завершённые</option>
+                <option value="cancelled">Отменённые</option>
+              </select>
+            </label>
+            <label>
+              Комната
+              <select
+                value={filter.roomId || ''}
+                disabled={!!historyRoomsError}
+                onChange={(event) =>
+                  setFilter({ ...filter, roomId: event.target.value, offset: 0 })
+                }
+              >
+                <option value="">Все комнаты</option>
+                {historyRooms.map((room) => (
+                  <option value={room.id} key={room.id}>
+                    {room.name || `Комната ${room.id.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {filter.period === 'custom' && (
+            <div className="date-range">
+              <label>
+                С даты
+                <input
+                  type="date"
+                  value={filter.from || ''}
+                  max={filter.to || undefined}
+                  onChange={(event) =>
+                    setFilter({ ...filter, from: event.target.value, offset: 0 })
+                  }
+                />
+              </label>
+              <label>
+                По дату включительно
+                <input
+                  type="date"
+                  value={filter.to || ''}
+                  min={filter.from || undefined}
+                  onChange={(event) => setFilter({ ...filter, to: event.target.value, offset: 0 })}
+                />
+              </label>
+            </div>
+          )}
         </div>
+        {historyRoomsError && (
+          <p className="form-error" role="alert">
+            {historyRoomsError}
+            <button className="text-button" onClick={workspace.refresh}>
+              Повторить
+            </button>
+          </p>
+        )}
         {historyError ? (
-          <div className="empty-state">
+          <div className="empty-state" role="alert">
             <Icon name="info" size={28} />
-            <h3>Не удалось загрузить историю</h3>
+            <h3>История пока недоступна</h3>
             <p>{historyError}</p>
             <button className="button secondary" onClick={workspace.refresh}>
               Попробовать ещё
@@ -95,8 +154,8 @@ export function History({ workspace }: { workspace: Workspace }) {
           </div>
         ) : historyLoading ? (
           <div className="table-loading" role="status">
+            <span className="loading-spinner" />
             Загружаем сессии…
-            <span className="loading-line" />
           </div>
         ) : page.items.length ? (
           <>
@@ -104,10 +163,11 @@ export function History({ workspace }: { workspace: Workspace }) {
               <table className="history-table">
                 <thead>
                   <tr>
-                    <th>Задача</th>
-                    <th>Когда</th>
-                    <th>В фокусе</th>
-                    <th>Результат</th>
+                    <th scope="col">Задача</th>
+                    <th scope="col">Комната</th>
+                    <th scope="col">Дата и время</th>
+                    <th scope="col">В фокусе</th>
+                    <th scope="col">Результат</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -126,19 +186,37 @@ export function History({ workspace }: { workspace: Workspace }) {
                           <div>
                             <strong>{record.taskTitle || 'Фокус без задачи'}</strong>
                             <span>
-                              Pomodoro · {Math.round(record.plannedDurationSeconds / 60)} минут
+                              Pomodoro · план {Math.round(record.plannedDurationSeconds / 60)} мин
                             </span>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="history-date">{dateLabel(record.startedAt)}</span>
-                        <span className="history-time">
-                          {new Date(record.startedAt).toLocaleTimeString('ru', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                        <span className="history-room-name">
+                          {record.roomName ||
+                            (record.roomId
+                              ? `Комната ${record.roomId.slice(0, 8)}`
+                              : 'Удалённая комната')}
                         </span>
+                      </td>
+                      <td>
+                        <time
+                          dateTime={record.startedAt}
+                          title={new Date(record.startedAt).toLocaleString('ru')}
+                        >
+                          <span className="history-date">{dateLabel(record.startedAt)}</span>
+                          <span className="history-time">
+                            {new Date(record.startedAt).toLocaleTimeString('ru', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                            –
+                            {new Date(record.endedAt).toLocaleTimeString('ru', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </time>
                       </td>
                       <td className="duration-cell">{duration(record.focusedSeconds)}</td>
                       <td>
@@ -185,9 +263,7 @@ export function History({ workspace }: { workspace: Workspace }) {
               <Icon name="history" size={28} />
             </span>
             <h3>Здесь начинается твоя история</h3>
-            <p>
-              Заверши фокус-сессию, и результат появится здесь. Можно также выбрать другой период.
-            </p>
+            <p>Заверши фокус-сессию или выбери другой период и комнату.</p>
           </div>
         )}
       </section>
