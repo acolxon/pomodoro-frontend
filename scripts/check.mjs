@@ -12,7 +12,10 @@ const originalWindow = globalThis.window;
 const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 const originalFetch = globalThis.fetch;
 const events = [];
-globalThis.window = { location: { hash: '#focus' }, dispatchEvent: (event) => events.push(event) };
+globalThis.window = {
+  location: { hash: '#focus', search: '', href: 'http://localhost:5173/#focus' },
+  dispatchEvent: (event) => events.push(event),
+};
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: { getItem: () => null, setItem() {}, removeItem() {} },
@@ -97,6 +100,21 @@ try {
     );
     assert.equal(utils.historyFilterError({ period: 'week', from: 'garbage' }), null);
   });
+  check('invitation links preserve deployment path and remove unrelated query data', () => {
+    const link = new URL(
+      utils.roomInvitationUrl('https://tomato.example/app/?private=value#history', 'ab23cd45'),
+    );
+    assert.equal(link.pathname, '/app/');
+    assert.equal(link.search, '?invite=AB23CD45');
+    assert.equal(link.hash, '#focus');
+    assert.equal(utils.inviteCodeFromSearch(link.search), 'AB23CD45');
+    assert.equal(utils.inviteCodeFromSearch('?invite=%20ab23cd45%20'), 'AB23CD45');
+  });
+  check('invalid invitations never become room join codes', () => {
+    for (const query of ['', '?invite=', '?invite=bad', '?invite=ABCD0000', '?invite=%3Cscript%3E'])
+      assert.equal(utils.inviteCodeFromSearch(query), null);
+    assert.throws(() => utils.roomInvitationUrl('https://tomato.example/', 'bad'));
+  });
   const { villagers, sampleRoute } = await vite.ssrLoadModule('/src/lib/village.ts');
   check('village routes pause at workstations and walk continuously without teleports', () => {
     for (const villager of villagers) {
@@ -122,7 +140,17 @@ try {
     }
   });
 
-  const { api, ApiError } = await vite.ssrLoadModule('/src/lib/api.ts');
+  const { api, ApiError, socketError } = await vite.ssrLoadModule('/src/lib/api.ts');
+  check('socket exceptions retain domain codes and share readable REST messages', () => {
+    const error = socketError({ code: 'NOT_ROOM_OWNER', message: 'server text' });
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.code, 'NOT_ROOM_OWNER');
+    assert.equal(error.message, 'Это действие доступно только владельцу комнаты.');
+    assert.equal(
+      socketError({ code: 'CUSTOM', message: 'Понятная ошибка' }).message,
+      'Понятная ошибка',
+    );
+  });
   let request;
   globalThis.fetch = async (url, options) => {
     request = { url, options };
@@ -179,6 +207,15 @@ try {
       assert.ok(html.includes('aria-current="page"'));
     });
   }
+  window.location.search = '?invite=AB23CD45';
+  const invitation = renderToStaticMarkup(React.createElement(App));
+  check('opening an invitation in demo asks for login and preserves the room code', () => {
+    assert.ok(invitation.includes('AB23CD45'));
+    assert.ok(invitation.includes('Войти и присоединиться'));
+    assert.ok(invitation.includes('Подтвердите') || invitation.includes('подтвердите'));
+    assert.ok(!invitation.includes('Передать права'));
+  });
+  window.location.search = '';
   console.log(`\n${checks} frontend checks passed.`);
 } finally {
   globalThis.window = originalWindow;

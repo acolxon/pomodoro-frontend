@@ -1,3 +1,4 @@
+import type { RealtimeError } from './types';
 const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 const messages: Record<string, string> = {
   INVALID_CREDENTIALS: 'Неверный логин или пароль.',
@@ -84,4 +85,13 @@ export function socketUrl(): string {
   if (configured) return configured;
   if (baseUrl.startsWith('http')) return new URL(baseUrl).origin;
   return window.location.origin;
+}
+
+/** Socket commands share the public domain codes and messages of REST. */
+export function socketError(error: RealtimeError): ApiError {
+  return new ApiError(
+    0,
+    error.code,
+    messages[error.code] || error.message || 'Действие недоступно.',
+  );
 }

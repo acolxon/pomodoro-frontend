@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
+import { roomInvitationUrl } from '../lib/utils';
 import { PixelAvatar } from './PixelAvatar';
 import { Icon } from './Icon';
 import { ConfirmModal, Modal, useModalTransition } from './Modal';
@@ -7,20 +8,27 @@ export function RoomModal({
   workspace,
   onClose: close,
   onAuth,
+  initialInviteCode,
 }: {
   workspace: Workspace;
   onClose: () => void;
   onAuth: () => void;
+  initialInviteCode?: string;
 }) {
   const { closing, onClose } = useModalTransition(close);
-  const [tab, setTab] = useState<'create' | 'join'>('create');
+  const [tab, setTab] = useState<'create' | 'join'>(initialInviteCode ? 'join' : 'create');
   const [name, setName] = useState('');
   const [capacity, setCapacity] = useState(6);
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(initialInviteCode || '');
   const [confirm, setConfirm] = useState(false);
   const [transfer, setTransfer] = useState<string | null>(null);
   const { room, members, user, demo, pending } = workspace;
-  const busy = pending.includes('room');
+  const busy =
+    pending.includes('room') || (!demo && (workspace.loading || workspace.membershipLoading));
+  const showRoom = room && !(demo && initialInviteCode);
+  const invitationUrl =
+    room && !demo ? roomInvitationUrl(window.location.href, room.inviteCode) : '';
+  const [linkFallback, setLinkFallback] = useState(false);
   useEffect(() => workspace.clearActionError('room'), [tab, workspace.clearActionError]);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -38,6 +46,15 @@ export function RoomModal({
       workspace.notify('Выделите и скопируйте код вручную.', 'error');
     }
   }
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(invitationUrl);
+      workspace.notify('Ссылка приглашения скопирована.');
+    } catch {
+      setLinkFallback(true);
+      workspace.notify('Выделите и скопируйте ссылку вручную.', 'error');
+    }
+  }
   if (confirm)
     return (
       <ConfirmModal
@@ -48,7 +65,10 @@ export function RoomModal({
         error={workspace.actionErrors.room}
         onClose={() => setConfirm(false)}
         onConfirm={async () => {
-          if (await workspace.leaveRoom()) onClose();
+          if (await workspace.leaveRoom()) {
+            if (initialInviteCode) setConfirm(false);
+            else onClose();
+          }
         }}
       />
     );
@@ -68,9 +88,9 @@ export function RoomModal({
     );
   return (
     <Modal
-      title={room ? room.name : 'Вместе легче начать.'}
+      title={showRoom ? room.name : 'Вместе легче начать.'}
       subtitle={
-        room
+        showRoom
           ? demo
             ? 'Локальная демо-комната. Приглашения работают после входа.'
             : `${members.length} из ${room.maxMembers} участников · ${room.ownerId === user?.id ? 'ты владелец' : 'ты участник'}`
@@ -80,8 +100,18 @@ export function RoomModal({
       closing={closing}
       busy={busy}
     >
-      {room ? (
+      {showRoom ? (
         <>
+          {initialInviteCode && !demo && (
+            <div className="inline-note">
+              <Icon name="info" />
+              <p>
+                {room.inviteCode === initialInviteCode
+                  ? 'Вы уже в комнате из приглашения.'
+                  : `Вы уже состоите в комнате. Чтобы принять приглашение ${initialInviteCode}, сначала выйдите из текущей комнаты.`}
+              </p>
+            </div>
+          )}
           {demo ? (
             <div className="inline-note">
               <Icon name="info" />
@@ -94,23 +124,39 @@ export function RoomModal({
               </p>
             </div>
           ) : (
-            <div className="invite-box">
-              <div>
-                <span className="eyebrow">КОД ПРИГЛАШЕНИЯ</span>
-                <input
-                  readOnly
-                  value={room.inviteCode}
-                  aria-label="Код приглашения в комнату"
-                  onFocus={(event) => event.target.select()}
-                />
+            <div className="room-invitation">
+              <div className="invite-box">
+                <div>
+                  <span className="eyebrow">КОД ПРИГЛАШЕНИЯ</span>
+                  <input
+                    readOnly
+                    value={room.inviteCode}
+                    aria-label="Код приглашения в комнату"
+                    onFocus={(event) => event.target.select()}
+                  />
+                </div>
+                <button
+                  className="icon-button"
+                  aria-label="Скопировать код приглашения"
+                  onClick={copy}
+                >
+                  <Icon name="copy" />
+                </button>
               </div>
-              <button
-                className="icon-button"
-                aria-label="Скопировать код приглашения"
-                onClick={copy}
-              >
-                <Icon name="copy" />
+              <button className="button secondary full" onClick={copyLink}>
+                <Icon name="copy" size={16} />
+                Пригласить по ссылке
               </button>
+              {linkFallback && (
+                <label className="invite-link-fallback">
+                  Ссылка приглашения
+                  <input
+                    readOnly
+                    value={invitationUrl}
+                    onFocus={(event) => event.target.select()}
+                  />
+                </label>
+              )}
             </div>
           )}
           <div className="member-list">
@@ -153,6 +199,17 @@ export function RoomModal({
         </>
       ) : (
         <>
+          {initialInviteCode && (
+            <div className="inline-note">
+              <Icon name="users" />
+              <p>
+                Приглашение в комнату по коду <strong>{initialInviteCode}</strong>.{' '}
+                {demo
+                  ? 'Войдите или зарегистрируйтесь, затем подтвердите присоединение.'
+                  : 'Подтвердите присоединение к комнате.'}
+              </p>
+            </div>
+          )}
           <div className="segmented">
             <button className={tab === 'create' ? 'selected' : ''} onClick={() => setTab('create')}>
               Создать комнату

@@ -89,3 +89,18 @@ export function dateLabel(value: string) {
 export function errorText(error: unknown) {
   return error instanceof Error ? error.message : 'Что-то пошло не так. Попробуйте ещё раз.';
 }
+
+/** Invitations use the existing server-generated room code; links never grant membership. */
+export function inviteCodeFromSearch(search: string): string | null {
+  const code = new URLSearchParams(search).get('invite')?.trim().toUpperCase();
+  return code && /^[A-HJ-NP-Z2-9]{8}$/.test(code) ? code : null;
+}
+export function roomInvitationUrl(href: string, code: string): string {
+  const valid = inviteCodeFromSearch(new URLSearchParams({ invite: code }).toString());
+  if (!valid) throw new Error('Некорректный код приглашения.');
+  const url = new URL(href);
+  url.search = '';
+  url.searchParams.set('invite', valid);
+  url.hash = 'focus';
+  return url.toString();
+}

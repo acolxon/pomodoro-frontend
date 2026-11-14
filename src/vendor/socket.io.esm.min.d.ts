@@ -1,12 +1,14 @@
-import type { Pomodoro, Snapshot } from '../lib/types';
+import type { Pomodoro, Snapshot, RealtimeError, RoomUpdated, RoomRemoved } from '../lib/types';
 interface ServerEvents {
   'realtime:ready': () => void;
   'room:snapshot': (snapshot: Snapshot) => void;
+  'room:updated': (event: RoomUpdated) => void;
+  'room:removed': (event: RoomRemoved) => void;
   'pomodoro:state': (state: Pomodoro) => void;
   disconnect: () => void;
   connect_error: () => void;
-  'realtime:error': (error: { code?: string; message?: string }) => void;
-  exception: (error: { message?: string }) => void;
+  'realtime:error': (error: RealtimeError) => void;
+  exception: (error: RealtimeError) => void;
 }
 /** Minimal declaration for the official Socket.IO browser bundle shipped alongside this file. */
 export interface Socket {

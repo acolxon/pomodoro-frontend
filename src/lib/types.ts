@@ -114,3 +114,15 @@ export interface Notice {
   message: string;
 }
 export const HISTORY_LIMIT = 8;
+
+export interface RealtimeError {
+  code: string;
+  message: string;
+}
+export interface RoomUpdated {
+  roomId: string;
+}
+export interface RoomRemoved {
+  roomId: string;
+  reason: 'left' | 'closed';
+}

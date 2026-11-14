@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useWorkspace } from './hooks/useWorkspace';
 import type { Page, Task } from './lib/types';
-import { duration } from './lib/utils';
+import { duration, inviteCodeFromSearch } from './lib/utils';
 import { AuthModal } from './components/AuthModal';
 import { History } from './components/History';
 import { Icon, TomatoMark, type IconName } from './components/Icon';
@@ -28,7 +28,10 @@ export default function App() {
   const workspace = useWorkspace();
   const [page, setPage] = useState<Page>(initialPage);
   const [authOpen, setAuthOpen] = useState(false);
-  const [roomOpen, setRoomOpen] = useState(false);
+  const [inviteCode, setInviteCode] = useState(() =>
+    inviteCodeFromSearch(window.location.search || ''),
+  );
+  const [roomOpen, setRoomOpen] = useState(!!inviteCode);
   const [taskEditor, setTaskEditor] = useState<Task | 'new' | null>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -72,6 +75,26 @@ export default function App() {
   const openAuth = () => {
     setRoomOpen(false);
     setAuthOpen(true);
+  };
+  useEffect(() => {
+    if (inviteCode && !authOpen && !demo) setRoomOpen(true);
+  }, [inviteCode, authOpen, demo]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('invite') && !inviteCodeFromSearch(url.search)) {
+      workspace.notify('Некорректная ссылка приглашения: нужен код из 8 символов.', 'error');
+      url.searchParams.delete('invite');
+      window.history.replaceState(window.history.state, '', url);
+    }
+  }, [workspace.notify]);
+  const closeRoom = () => {
+    setRoomOpen(false);
+    if (inviteCode) {
+      setInviteCode(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('invite');
+      window.history.replaceState(window.history.state, '', url);
+    }
   };
   return (
     <div className="app-shell">
@@ -203,7 +226,7 @@ export default function App() {
                       />
                       {demo
                         ? 'ДЕМО-КОМНАТА'
-                        : workspace.connection === 'connected'
+                        : room && workspace.connection === 'connected'
                           ? 'ВЫ В КОМНАТЕ'
                           : room
                             ? 'НЕТ СОЕДИНЕНИЯ'
@@ -226,7 +249,7 @@ export default function App() {
                   </button>
                   <div className="village-welcome">
                     <img
-                      src="../../public/art/sign.png"
+                      src="/art/sign.png"
                       className="village-sign"
                       alt="Добро пожаловать в Tomato"
                     />
@@ -329,7 +352,12 @@ export default function App() {
       </div>
       {authOpen && <AuthModal workspace={workspace} onClose={() => setAuthOpen(false)} />}
       {roomOpen && (
-        <RoomModal workspace={workspace} onClose={() => setRoomOpen(false)} onAuth={openAuth} />
+        <RoomModal
+          workspace={workspace}
+          initialInviteCode={inviteCode || undefined}
+          onClose={closeRoom}
+          onAuth={openAuth}
+        />
       )}
       {taskEditor && (
         <TaskEditor

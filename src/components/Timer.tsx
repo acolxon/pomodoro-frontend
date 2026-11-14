@@ -94,7 +94,9 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
             {isBreak
               ? 'Выдохни. Ты хорошо поработал.'
               : paused
-                ? 'Вернись, когда будешь готов.'
+                ? demo
+                  ? 'Вернись, когда будешь готов.'
+                  : 'Пауза ограничена по времени.'
                 : 'Одна задача. Один маленький шаг.'}
           </span>
         </div>
@@ -140,6 +142,8 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
           </button>
         ) : !owner ? (
           'Таймером управляет владелец'
+        ) : paused && !demo ? (
+          'Долгая пауза отменяется автоматически.'
         ) : isBreak ? (
           'Результат сохранён. Время отдохнуть.'
         ) : (

@@ -2552,3 +2552,21 @@ textarea {
     max-width: 112px;
   }
 }
+
+.room-invitation {
+  margin-bottom: 18px;
+}
+.room-invitation .invite-box {
+  margin-bottom: 10px;
+}
+.invite-link-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  margin-top: 12px;
+}
+.invite-link-fallback input {
+  width: 100%;
+  font-size: 11px;
+}

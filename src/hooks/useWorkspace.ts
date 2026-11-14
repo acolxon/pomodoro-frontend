@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from '../vendor/socket.io.esm.min.js';
-import { api, ApiError, socketUrl } from '../lib/api';
+import { api, ApiError, socketError, socketUrl } from '../lib/api';
 import { demoHistory, demoMembers, demoRoom, demoTasks, demoUser } from '../lib/demo';
 import {
   emptyStats,
@@ -22,6 +22,7 @@ import {
   type Member,
   type Notice,
   type Pomodoro,
+  type RealtimeError,
   type Room,
   type Snapshot,
   type Task,
@@ -86,6 +87,8 @@ export function useWorkspace() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyRooms, setHistoryRooms] = useState<HistoryRoom[]>([]);
   const [historyRoomsError, setHistoryRoomsError] = useState<string | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(!!token);
+  const [membershipRevision, setMembershipRevision] = useState(0);
   const [revision, setRevision] = useState(0);
   const [pending, setPending] = useState<string[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -103,6 +106,16 @@ export function useWorkspace() {
     planned: number;
   } | null>(null);
   const roomId = room?.id ?? null;
+  const currentRoomId = useRef(roomId);
+  const membershipEpoch = useRef(0);
+  const timerEventRevision = useRef(0);
+  const syncRoom = useRef<(() => void) | null>(null);
+  currentRoomId.current = roomId;
+  const requestMembership = useCallback(() => {
+    membershipEpoch.current += 1;
+    setMembershipLoading(true);
+    setMembershipRevision((value) => value + 1);
+  }, []);
 
   const notify = useCallback((message: string, kind: Notice['kind'] = 'success') => {
     setNotices((current) => [
@@ -152,6 +165,7 @@ export function useWorkspace() {
     previousTimer.current = null;
     setActionErrors({});
     setLoading(false);
+    setMembershipLoading(false);
     refresh();
   }, [refresh]);
 
@@ -191,117 +205,187 @@ export function useWorkspace() {
     return () => controller.abort();
   }, [token, revision]);
 
-  // Membership and ownership can change through another browser or HTTP client.
+  // One read on login, explicit refresh, or membership events; no interval polling.
   useEffect(() => {
     if (!token) return;
     const controller = new AbortController();
-    let running = false;
-    const sync = async () => {
-      if (running) return;
-      running = true;
+    setMembershipLoading(true);
+    const epoch = membershipEpoch.current;
+    const current = () =>
+      !controller.signal.aborted &&
+      currentToken.current === token &&
+      membershipEpoch.current === epoch;
+    void (async () => {
       try {
         const nextRoom = await api<Room>('/rooms/me', token, { signal: controller.signal });
         const nextMembers = await api<Member[]>(`/rooms/${nextRoom.id}/members`, token, {
           signal: controller.signal,
         });
-        if (!controller.signal.aborted && currentToken.current === token) {
+        if (current()) {
           setRoom(nextRoom);
           setMembers(nextMembers);
         }
       } catch (error) {
-        if (controller.signal.aborted || currentToken.current !== token) return;
+        if (!current()) return;
         if (error instanceof ApiError && error.code === 'NOT_IN_ROOM') {
+          currentRoomId.current = null;
           setRoom(null);
           setMembers([]);
           setTimer(null);
-        } else if (currentToken.current === token) setLoadError(errorText(error));
+          previousTimer.current = null;
+        } else setLoadError(errorText(error));
       } finally {
-        running = false;
+        if (current()) setMembershipLoading(false);
       }
-    };
-    void sync();
-    const interval = window.setInterval(sync, 10_000);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void sync();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      controller.abort();
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [token, revision]);
+    })();
+    return () => controller.abort();
+  }, [token, revision, membershipRevision]);
 
+  // Keep the authenticated connection even without a room, so other tabs can
+  // announce a new membership through the private server-side user channel.
   useEffect(() => {
     previousTimer.current = null;
     if (!token) {
       setConnection('demo');
       return;
     }
-    if (!roomId) {
-      setConnection('disconnected');
-      setTimer(null);
-      return;
-    }
     setConnection('connecting');
-    setTimer(null);
     const client = io(socketUrl(), { auth: { token }, autoConnect: false, reconnection: true });
     socket.current = client;
-    const snapshot = (value: Snapshot) => {
-      if (currentToken.current !== token || value.room.id !== roomId) return;
-      setRoom(value.room);
-      setMembers(value.members);
-      acceptTimer(value.pomodoro);
-      setConnection('connected');
-    };
+    let ready = false;
+    let joinedRoomId: string | null = null;
+    let generation = 0;
+    const current = () => currentToken.current === token && socket.current === client;
     const join = () => {
+      if (!current() || !ready || !client.connected) return;
+      const nextRoomId = currentRoomId.current;
+      const requestGeneration = ++generation;
+      const timerRevision = timerEventRevision.current;
+      if (joinedRoomId && joinedRoomId !== nextRoomId) {
+        client.timeout(8000).emit('room:leave', { roomId: joinedRoomId }, () => {});
+      }
+      joinedRoomId = nextRoomId;
+      if (!nextRoomId) {
+        setTimer(null);
+        setConnection('connected');
+        return;
+      }
+      setConnection('connecting');
       client
         .timeout(8000)
-        .emit('room:join', { roomId }, (error: Error | null, value: Snapshot | undefined) => {
-          if (currentToken.current !== token || !client.connected) return;
-          if (error || !value?.pomodoro) {
-            setConnection('disconnected');
-            return;
-          }
-          snapshot(value);
-        });
+        .emit(
+          'room:join',
+          { roomId: nextRoomId },
+          (error: Error | null, value: Snapshot | undefined) => {
+            if (
+              !current() ||
+              !ready ||
+              !client.connected ||
+              generation !== requestGeneration ||
+              currentRoomId.current !== nextRoomId
+            )
+              return;
+            if (error || !value?.pomodoro) {
+              setConnection('disconnected');
+              return;
+            }
+            if (value.room.id !== nextRoomId || value.pomodoro.roomId !== nextRoomId) return;
+            if (timerEventRevision.current === timerRevision) acceptTimer(value.pomodoro);
+            setConnection('connected');
+          },
+        );
     };
-    client.on('realtime:ready', join);
-    client.on('room:snapshot', snapshot);
-    client.on('pomodoro:state', (value: Pomodoro) => {
-      if (value.roomId === roomId && currentToken.current === token) acceptTimer(value);
+    syncRoom.current = join;
+    client.on('realtime:ready', () => {
+      ready = true;
+      requestMembership();
+      join();
     });
-    client.on('disconnect', () => setConnection('disconnected'));
-    client.on('connect_error', () => setConnection('disconnected'));
-    client.io.on('reconnect_attempt', () => setConnection('connecting'));
-    client.on('realtime:error', (error: { code?: string; message?: string }) => {
-      if (currentToken.current !== token) return;
+    client.on('room:updated', () => {
+      if (current()) requestMembership();
+    });
+    client.on('room:removed', (event) => {
+      if (!current()) return;
+      if (currentRoomId.current === event.roomId) {
+        currentRoomId.current = null;
+        timerEventRevision.current += 1;
+        generation += 1;
+        joinedRoomId = null;
+        setRoom(null);
+        setMembers([]);
+        setTimer(null);
+        previousTimer.current = null;
+        if (!busy.current.has('room'))
+          notify(
+            event.reason === 'closed'
+              ? 'Комната закрыта.'
+              : 'Вы вышли из комнаты в другой вкладке.',
+          );
+      }
+      requestMembership();
+      refresh();
+    });
+    client.on('pomodoro:state', (value) => {
+      if (current() && ready && value.roomId === currentRoomId.current) {
+        timerEventRevision.current += 1;
+        acceptTimer(value);
+      }
+    });
+    const disconnected = () => {
+      ready = false;
+      generation += 1;
+      timerEventRevision.current += 1;
+      if (current()) setConnection('disconnected');
+    };
+    client.on('disconnect', disconnected);
+    client.on('connect_error', disconnected);
+    client.io.on('reconnect_attempt', () => {
+      if (current()) setConnection('connecting');
+    });
+    const handleError = (error: RealtimeError) => {
+      if (!current()) return;
       if (error.code === 'UNAUTHORIZED') {
         enterDemo();
         notify('Не удалось подтвердить вход. Войдите ещё раз.', 'error');
-      } else notify(error.message || 'Ошибка подключения к комнате.', 'error');
-    });
-    client.on('exception', (error: { message?: string }) => {
-      if (currentToken.current !== token) return;
-      if (!busy.current.has('timer')) notify(error.message || 'Действие недоступно.', 'error');
-      refresh();
-    });
-    client.connect();
+        return;
+      }
+      if (!busy.current.has('timer')) notify(socketError(error).message, 'error');
+      if (
+        error.code === 'NOT_IN_ROOM' ||
+        error.code === 'ROOM_CLOSED' ||
+        error.code === 'ROOM_NOT_FOUND'
+      )
+        requestMembership();
+    };
+    client.on('realtime:error', handleError);
+    client.on('exception', handleError);
     const visible = () => {
-      if (document.visibilityState === 'visible' && client.connected) join();
+      if (document.visibilityState === 'visible' && client.connected && ready) {
+        requestMembership();
+        join();
+      }
     };
     document.addEventListener('visibilitychange', visible);
-    const interval = window.setInterval(() => {
-      if (client.connected && document.visibilityState === 'visible') join();
-    }, 30_000);
+    client.connect();
     return () => {
-      window.clearInterval(interval);
+      generation += 1;
+      ready = false;
       document.removeEventListener('visibilitychange', visible);
+      syncRoom.current = null;
       client.removeAllListeners();
       client.disconnect();
-      socket.current = null;
+      if (socket.current === client) socket.current = null;
     };
-  }, [token, roomId, acceptTimer, enterDemo, notify, refresh]);
+  }, [token, acceptTimer, enterDemo, notify, refresh, requestMembership]);
+
+  useEffect(() => {
+    previousTimer.current = null;
+    if (!demo) {
+      timerEventRevision.current += 1;
+      setTimer(null);
+      syncRoom.current?.();
+    }
+  }, [roomId, demo]);
 
   // History and its totals use the same filters; dashboard totals always cover the current week.
   useEffect(() => {
@@ -493,6 +577,7 @@ export function useWorkspace() {
         setFilter({ period: 'week', status: '', offset: 0 });
         setToken(result.accessToken);
         setLoading(true);
+        setMembershipLoading(true);
         setLoadError(null);
         demoRun.current = null;
       },
@@ -598,14 +683,11 @@ export function useWorkspace() {
           setMembers(demoMembers());
           setTimer(idleTimer(next.id));
         } else {
-          const next = await api<Room>('/rooms', token, {
+          await api<Room>('/rooms', token, {
             method: 'POST',
             body: { name, maxMembers },
           });
-          if (currentToken.current === token) {
-            setRoom(next);
-            refresh();
-          }
+          if (currentToken.current === token) requestMembership();
         }
       },
       'Комната создана. Пригласите тех, с кем хотите поработать.',
@@ -619,14 +701,11 @@ export function useWorkspace() {
           throw new Error(
             'Для входа в общую комнату нужен аккаунт. Демо-комната работает только в этом браузере.',
           );
-        const next = await api<Room>('/rooms/join', token, {
+        await api<Room>('/rooms/join', token, {
           method: 'POST',
           body: { inviteCode },
         });
-        if (currentToken.current === token) {
-          setRoom(next);
-          refresh();
-        }
+        if (currentToken.current === token) requestMembership();
       },
       'Вы присоединились к комнате.',
     );
@@ -638,9 +717,11 @@ export function useWorkspace() {
         if (!demo) await api<void>('/rooms/leave', token, { method: 'POST' });
         else finishDemo('cancelled', timer);
         if (currentToken.current === token) {
-          setRoom(null);
-          setMembers([]);
-          setTimer(null);
+          if (demo) {
+            setRoom(null);
+            setMembers([]);
+            setTimer(null);
+          } else requestMembership();
           refresh();
         }
       },
@@ -652,14 +733,11 @@ export function useWorkspace() {
       'room',
       async () => {
         if (!room || demo) return;
-        const next = await api<Room>(`/rooms/${room.id}/owner`, token, {
+        await api<Room>(`/rooms/${room.id}/owner`, token, {
           method: 'PATCH',
           body: { newOwnerId: userId },
         });
-        if (currentToken.current === token) {
-          setRoom(next);
-          refresh();
-        }
+        if (currentToken.current === token) requestMembership();
       },
       'Права владельца переданы.',
     );
@@ -700,10 +778,11 @@ export function useWorkspace() {
         const client = socket.current;
         if (!client?.connected || connection !== 'connected')
           throw new Error('Соединение с комнатой прервано. Дождитесь подключения.');
+        const timerRevision = timerEventRevision.current;
         const value = await new Promise<Pomodoro>((resolve, reject) => {
-          const onException = (error: { message?: string }) => {
+          const onException = (error: RealtimeError) => {
             cleanup();
-            reject(new Error(error.message || 'Команда недоступна.'));
+            reject(socketError(error));
           };
           const cleanup = () => client.off('exception', onException);
           client.once('exception', onException);
@@ -724,7 +803,14 @@ export function useWorkspace() {
               },
             );
         });
-        if (currentToken.current === token) acceptTimer(value);
+        if (
+          currentToken.current === token &&
+          socket.current === client &&
+          client.connected &&
+          currentRoomId.current === room.id &&
+          timerEventRevision.current === timerRevision
+        )
+          acceptTimer(value);
         return;
       }
       const state = timer ?? idleTimer(room.id);
@@ -819,6 +905,7 @@ export function useWorkspace() {
     historyStats,
     loading,
     historyLoading,
+    membershipLoading,
     loadError,
     historyError,
     historyRooms,
