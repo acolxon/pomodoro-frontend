@@ -25,6 +25,7 @@ import {
   type RealtimeError,
   type Room,
   type Snapshot,
+  type SessionTask,
   type Task,
   type TaskStatus,
   type User,
@@ -73,6 +74,13 @@ export function useWorkspace() {
   const [timer, setTimer] = useState<Pomodoro | null>(() =>
     token ? null : idleTimer('demo-room'),
   );
+  const [sessionTaskResult, setSessionTaskResult] = useState<{
+    runId: string;
+    roomId: string;
+    token: string;
+    value: SessionTask | null;
+    error: boolean;
+  } | null>(null);
   const [connection, setConnection] = useState<Connection>(token ? 'connecting' : 'demo');
   const [clockOffset, setClockOffset] = useState(0);
   const [records, setRecords] = useState<HistoryRecord[]>(demoHistory);
@@ -403,6 +411,48 @@ export function useWorkspace() {
       syncRoom.current?.();
     }
   }, [roomId, demo]);
+
+  const focusRunId =
+    timer?.phase === 'focus' && timer.status !== 'idle' ? timer.pomodoroSessionId : null;
+  useEffect(() => {
+    if (!token || !focusRunId || !roomId) return;
+    const controller = new AbortController();
+    api<SessionTask>(`/history/sessions/${focusRunId}/my-task`, token, {
+      signal: controller.signal,
+    })
+      .then((value) => {
+        if (!controller.signal.aborted && currentToken.current === token)
+          setSessionTaskResult({ runId: focusRunId, roomId, token, value, error: false });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && currentToken.current === token)
+          setSessionTaskResult({ runId: focusRunId, roomId, token, value: null, error: true });
+      });
+    return () => controller.abort();
+  }, [token, focusRunId, roomId, revision]);
+
+  const sessionTask = !focusRunId
+    ? null
+    : demo
+      ? demoRun.current?.id === focusRunId
+        ? {
+            participant: true,
+            taskId: demoRun.current.taskId,
+            taskTitle: demoRun.current.taskTitle,
+          }
+        : null
+      : sessionTaskResult?.runId === focusRunId &&
+          sessionTaskResult.roomId === roomId &&
+          sessionTaskResult.token === token
+        ? sessionTaskResult.value
+        : null;
+  const sessionTaskError =
+    !!focusRunId &&
+    !demo &&
+    sessionTaskResult?.runId === focusRunId &&
+    sessionTaskResult.roomId === roomId &&
+    sessionTaskResult.token === token &&
+    sessionTaskResult.error;
 
   // History and its totals use the same filters; dashboard totals always cover the current week.
   useEffect(() => {
@@ -912,6 +962,8 @@ export function useWorkspace() {
     room,
     members,
     timer,
+    sessionTask,
+    sessionTaskError,
     connection,
     clockOffset,
     today,

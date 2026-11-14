@@ -75,6 +75,11 @@ export interface Pomodoro {
   serverTime: string;
 }
 export type Command = 'start' | 'pause' | 'resume' | 'cancel';
+export interface SessionTask {
+  participant: boolean;
+  taskId: string | null;
+  taskTitle: string | null;
+}
 export interface Snapshot {
   room: Room;
   members: Member[];

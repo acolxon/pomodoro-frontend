@@ -216,6 +216,73 @@ try {
     assert.ok(!invitation.includes('Передать права'));
   });
   window.location.search = '';
+  const { Timer } = await vite.ssrLoadModule('/src/components/Timer.tsx');
+  const { TaskList } = await vite.ssrLoadModule('/src/components/TaskList.tsx');
+  check('focus displays the active task and identifies the task recorded at start', () => {
+    const original = {
+      id: 'first',
+      title: 'Первая задача',
+      status: 'todo',
+      createdAt: '2026-11-15T10:00:00Z',
+    };
+    const next = {
+      id: 'next',
+      title: 'Другая задача',
+      status: 'in_progress',
+      createdAt: '2026-11-15T10:00:00Z',
+    };
+    const workspace = {
+      tasks: [original, next],
+      pending: [],
+      demo: false,
+      connection: 'connected',
+      clockOffset: 0,
+      timer: {
+        status: 'running',
+        phase: 'focus',
+        durationSeconds: 1500,
+        endsAt: new Date(Date.now() + 1500000).toISOString(),
+      },
+      room: { id: 'room', ownerId: 'user' },
+      user: { id: 'user' },
+      sessionTask: { participant: true, taskId: 'first', taskTitle: 'Первая задача' },
+    };
+    const timerHtml = renderToStaticMarkup(React.createElement(Timer, { workspace, onRoom() {} }));
+    assert.ok(timerHtml.includes('Текущая задача: Другая задача'));
+    assert.ok(timerHtml.includes('В истории сессии сохранится задача на старте: Первая задача'));
+    assert.ok(!timerHtml.includes('Следом:'));
+    const tasksHtml = renderToStaticMarkup(
+      React.createElement(TaskList, { workspace, onAdd() {}, onEdit() {}, onDelete() {} }),
+    );
+    assert.ok(tasksHtml.includes('Текущая задача'));
+    assert.ok(!tasksHtml.includes('Для следующего фокуса'));
+    const sameTask = { ...workspace, tasks: [{ ...original, status: 'in_progress' }] };
+    const sameHtml = renderToStaticMarkup(
+      React.createElement(TaskList, {
+        workspace: sameTask,
+        onAdd() {},
+        onEdit() {},
+        onDelete() {},
+      }),
+    );
+    assert.ok(sameHtml.includes('Текущая задача'));
+    assert.ok(!sameHtml.includes('Для следующего фокуса'));
+    const finished = { ...workspace, tasks: [{ ...original, status: 'completed' }] };
+    const finishedHtml = renderToStaticMarkup(
+      React.createElement(Timer, { workspace: finished, onRoom() {} }),
+    );
+    assert.ok(finishedHtml.includes('Задача не выбрана'));
+    assert.ok(finishedHtml.includes('В истории сессии сохранится задача на старте: Первая задача'));
+    const observer = {
+      ...workspace,
+      sessionTask: { participant: false, taskId: null, taskTitle: null },
+    };
+    assert.ok(
+      renderToStaticMarkup(
+        React.createElement(Timer, { workspace: observer, onRoom() {} }),
+      ).includes('Вы присоединились после начала фокуса'),
+    );
+  });
   const { ProgressCard } = await vite.ssrLoadModule('/src/components/ProgressCard.tsx');
   const player = {
     username: 'Alice',

@@ -152,10 +152,10 @@ export function TaskList({
                 </button>
                 {task.status === 'in_progress' && (
                   <span className="active-label">
-                    <span className="tiny-dot" />В фокусе
+                    <span className="tiny-dot" />
                     {timer?.phase === 'focus' && timer.status !== 'idle'
-                      ? ' · для следующей сессии'
-                      : ''}
+                      ? 'Текущая задача'
+                      : 'Выбрана для фокуса'}
                   </span>
                 )}
                 {!compact && (
@@ -258,7 +258,7 @@ export function TaskList({
           <Icon name="target" size={15} />
           <span>
             {open.length > 4 ? `Ещё ${open.length - 4} в разделе «Задачи». ` : ''}Выбери{' '}
-            <Icon name="play" size={12} /> задачу для следующего фокуса.
+            <Icon name="play" size={12} /> задачу для работы.
           </span>
         </div>
       )}

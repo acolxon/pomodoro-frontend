@@ -152,11 +152,28 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
       </p>
       <div className="current-task">
         <Icon name="target" size={16} />
-        <span>
-          {timer?.phase === 'focus' && timer.status !== 'idle' ? 'Следом: ' : ''}
-          {active?.title || 'Фокус без выбранной задачи'}
-        </span>
+        <span>{active ? `Текущая задача: ${active.title}` : 'Задача не выбрана'}</span>
       </div>
+      {timer?.phase === 'focus' && timer.status !== 'idle' && (
+        <p className="timer-undertext">
+          {workspace.sessionTaskError ? (
+            <>
+              Не удалось загрузить задачу сессии.{' '}
+              <button className="text-button" onClick={workspace.refresh}>
+                Повторить
+              </button>
+            </>
+          ) : !workspace.sessionTask ? (
+            'Загружаем данные сессии…'
+          ) : !workspace.sessionTask.participant ? (
+            'Вы присоединились после начала фокуса.'
+          ) : workspace.sessionTask.taskTitle ? (
+            `В истории сессии сохранится задача на старте: ${workspace.sessionTask.taskTitle}.`
+          ) : (
+            'Сессия началась без задачи — так она сохранится в истории.'
+          )}
+        </p>
+      )}
       {cancel && (
         <ConfirmModal
           title={isBreak ? 'Закончить перерыв?' : 'Завершить фокус раньше?'}
