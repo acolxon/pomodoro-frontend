@@ -168,7 +168,22 @@ export function RoomModal({
                     {member.username}
                     {member.userId === user?.id && <span className="muted"> · ты</span>}
                   </strong>
-                  <span>{member.role === 'owner' ? 'Владелец комнаты' : 'Участник'}</span>
+                  <span>
+                    {member.role === 'owner' ? 'Владелец комнаты' : 'Участник'} ·{' '}
+                    {
+                      (
+                        {
+                          waiting: 'ожидает',
+                          ready: 'готов',
+                          focusing: 'занимается',
+                          left_early: 'вышел из фокуса',
+                          finished: 'закончил',
+                          resting: 'отдыхает',
+                          observer: 'наблюдает',
+                        } as const
+                      )[member.sessionStatus || (member.ready ? 'ready' : 'waiting')]
+                    }
+                  </span>
                 </div>
                 {member.role === 'owner' ? (
                   <Icon name="crown" size={18} className="crown" />

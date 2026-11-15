@@ -216,6 +216,67 @@ try {
     assert.ok(!invitation.includes('Передать права'));
   });
   window.location.search = '';
+  const { ShopModal } = await vite.ssrLoadModule('/src/components/ShopModal.tsx');
+  check('shop asks demo users to sign in and shows loading for a real account', () => {
+    const guest = renderToStaticMarkup(
+      React.createElement(ShopModal, { workspace: { demo: true }, onClose() {}, onAuth() {} }),
+    );
+    assert.ok(guest.includes('Войди в аккаунт'));
+    assert.ok(!guest.includes('Купить за'));
+    const user = renderToStaticMarkup(
+      React.createElement(ShopModal, {
+        workspace: { demo: false, user: { id: 'test' } },
+        onClose() {},
+        onAuth() {},
+      }),
+    );
+    assert.ok(user.includes('Открываем лавку'));
+  });
+  const { SessionPanel } = await vite.ssrLoadModule('/src/components/SessionPanel.tsx');
+  check('session panel explains readiness and shows personal leave only to a participant', () => {
+    const workspace = {
+      room: { id: 'room', name: 'Сад', inviteCode: 'AB23CD45', maxMembers: 6 },
+      user: { id: 'a' },
+      demo: false,
+      connection: 'connected',
+      members: [
+        { userId: 'a', username: 'Alice', ready: false, sessionStatus: 'waiting' },
+        { userId: 'b', username: 'Bob', ready: true, sessionStatus: 'ready' },
+      ],
+      tasks: [{ id: 'task', status: 'in_progress' }],
+      timer: { status: 'idle', phase: null },
+      pending: [],
+      actionErrors: {},
+    };
+    const ready = renderToStaticMarkup(React.createElement(SessionPanel, { workspace }));
+    assert.ok(ready.includes('Я готов'));
+    assert.ok(ready.includes('Готов'));
+    assert.ok(ready.includes('Сад'));
+    assert.ok(ready.includes('AB23CD45'));
+    assert.ok(ready.includes('Скопировать ссылку'));
+    assert.ok(ready.includes('class="mobile-room-toggle"'));
+    assert.ok(ready.includes('aria-controls="room-sidebar-content"'));
+    assert.ok(ready.includes('Не готов'));
+    assert.ok(ready.includes('aria-expanded="false"'));
+    assert.ok(ready.includes('id="session-members-list"'));
+    assert.ok(ready.includes('hidden=""'));
+    const focus = {
+      ...workspace,
+      timer: { status: 'running', phase: 'focus' },
+      members: [{ ...workspace.members[0], sessionStatus: 'focusing' }],
+    };
+    assert.ok(
+      renderToStaticMarkup(React.createElement(SessionPanel, { workspace: focus })).includes(
+        'Выйти из фокуса',
+      ),
+    );
+    const observer = { ...focus, members: [{ ...focus.members[0], sessionStatus: 'observer' }] };
+    assert.ok(
+      !renderToStaticMarkup(React.createElement(SessionPanel, { workspace: observer })).includes(
+        'Выйти из фокуса',
+      ),
+    );
+  });
   const { Timer } = await vite.ssrLoadModule('/src/components/Timer.tsx');
   const { TaskList } = await vite.ssrLoadModule('/src/components/TaskList.tsx');
   check('focus displays the active task and identifies the task recorded at start', () => {
@@ -233,6 +294,7 @@ try {
     };
     const workspace = {
       tasks: [original, next],
+      members: [],
       pending: [],
       demo: false,
       connection: 'connected',

@@ -1,4 +1,8 @@
 export type Page = 'focus' | 'tasks' | 'history';
+export interface ShopState {
+  coins: number;
+  item: { code: 'xp_booster'; price: number; bonusPercent: number; quantity: number };
+}
 export type TaskStatus = 'todo' | 'in_progress' | 'completed';
 export interface Task {
   id: string;
@@ -61,6 +65,26 @@ export interface Member {
   level: number;
   role: 'owner' | 'member';
   joinedAt: string;
+  ready?: boolean;
+  sessionStatus?:
+    'waiting' | 'ready' | 'focusing' | 'left_early' | 'finished' | 'resting' | 'observer';
+  taskTitle?: string | null;
+}
+export interface SessionResults {
+  runId: string;
+  status: 'completed' | 'cancelled';
+  startedAt: string;
+  endedAt: string;
+  participants: {
+    userId: string;
+    username: string;
+    taskTitle: string | null;
+    status: 'completed' | 'cancelled';
+    finishReason?: 'completed' | 'cancelled' | 'left_focus' | 'left_room' | null;
+    focusedSeconds: number;
+    xpEarned: number;
+    coinsEarned: number;
+  }[];
 }
 export interface Pomodoro {
   roomId: string;

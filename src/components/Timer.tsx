@@ -30,6 +30,8 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
   const seconds = remaining(timer, workspace.clockOffset, now);
   const fraction = timer && timer.status !== 'idle' ? seconds / timer.durationSeconds : 1;
   const active = workspace.tasks.find((task) => task.status === 'in_progress');
+  const everyoneReady =
+    workspace.members.length > 0 && workspace.members.every((member) => member.ready);
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 200);
     return () => window.clearInterval(interval);
@@ -111,7 +113,13 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
           <>
             <button
               className="button primary timer-start"
-              disabled={busy || !owner || !connected || !timer}
+              disabled={
+                busy ||
+                !owner ||
+                !connected ||
+                !timer ||
+                (timer.status === 'idle' && !everyoneReady)
+              }
               onClick={() =>
                 void workspace.command(running ? 'pause' : paused ? 'resume' : 'start')
               }
@@ -142,6 +150,8 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
           </button>
         ) : !owner ? (
           'Таймером управляет владелец'
+        ) : timer?.status === 'idle' && !everyoneReady ? (
+          'Дождитесь готовности всех участников.'
         ) : paused && !demo ? (
           'Долгая пауза отменяется автоматически.'
         ) : isBreak ? (
@@ -163,6 +173,9 @@ export function Timer({ workspace, onRoom }: { workspace: Workspace; onRoom: () 
                 Повторить
               </button>
             </>
+          ) : workspace.members.find((member) => member.userId === user?.id)?.sessionStatus ===
+            'left_early' ? (
+            'Вы вышли из фокуса и остались в комнате.'
           ) : !workspace.sessionTask ? (
             'Загружаем данные сессии…'
           ) : !workspace.sessionTask.participant ? (

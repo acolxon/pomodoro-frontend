@@ -20,7 +20,7 @@ export interface Socket {
   timeout(milliseconds: number): this;
   emit<T>(
     event: string,
-    payload: { roomId: string },
+    payload: { roomId: string; ready?: boolean },
     callback: (error: Error | null, value?: T) => void,
   ): this;
   connect(): this;

@@ -36,6 +36,8 @@ export function demoMembers(): Member[] {
       avatarUrl: null,
       level: 1,
       role: 'owner',
+      ready: false,
+      sessionStatus: 'waiting',
       joinedAt: new Date().toISOString(),
     },
   ];

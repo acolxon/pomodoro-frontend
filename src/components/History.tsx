@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import type { Workspace } from '../hooks/useWorkspace';
 import { HISTORY_LIMIT } from '../lib/types';
 import { dateLabel, duration } from '../lib/utils';
 import { Icon } from './Icon';
 import { ActivityChart } from './ActivityChart';
+import { SessionResultsModal } from './SessionResultsModal';
 export function History({ workspace }: { workspace: Workspace }) {
+  const [resultsRun, setResultsRun] = useState<string | null>(null);
   const {
     filter,
     setFilter,
@@ -225,6 +228,12 @@ export function History({ workspace }: { workspace: Workspace }) {
                           <Icon name={record.status === 'completed' ? 'check' : 'stop'} size={13} />
                           {record.status === 'completed' ? 'Завершена' : 'Отменена'}
                         </span>
+                        <button
+                          className="text-button history-results-button"
+                          onClick={() => setResultsRun(record.pomodoroSessionId)}
+                        >
+                          Итоги
+                        </button>
                       </td>
                       <td className="history-reward">
                         {(record.xpEarned ?? 0) > 0 ? (
@@ -287,6 +296,13 @@ export function History({ workspace }: { workspace: Workspace }) {
           </div>
         )}
       </section>
+      {resultsRun && (
+        <SessionResultsModal
+          workspace={workspace}
+          runId={resultsRun}
+          onClose={() => setResultsRun(null)}
+        />
+      )}
     </>
   );
 }

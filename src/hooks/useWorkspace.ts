@@ -26,6 +26,8 @@ import {
   type Room,
   type Snapshot,
   type SessionTask,
+  type SessionResults,
+  type ShopState,
   type Task,
   type TaskStatus,
   type User,
@@ -81,6 +83,7 @@ export function useWorkspace() {
     value: SessionTask | null;
     error: boolean;
   } | null>(null);
+  const [lastFinishedRun, setLastFinishedRun] = useState<string | null>(null);
   const [connection, setConnection] = useState<Connection>(token ? 'connecting' : 'demo');
   const [clockOffset, setClockOffset] = useState(0);
   const [records, setRecords] = useState<HistoryRecord[]>(demoHistory);
@@ -113,6 +116,9 @@ export function useWorkspace() {
     taskTitle: string | null;
     planned: number;
   } | null>(null);
+  const demoResults = useRef(
+    new Map<string, 'completed' | 'cancelled' | 'left_focus' | 'left_room'>(),
+  );
   const roomId = room?.id ?? null;
   const currentRoomId = useRef(roomId);
   const membershipEpoch = useRef(0);
@@ -152,8 +158,10 @@ export function useWorkspace() {
       if (
         previous?.phase === 'focus' &&
         (next.phase !== 'focus' || previous.pomodoroSessionId !== next.pomodoroSessionId)
-      )
+      ) {
+        if (previous.pomodoroSessionId) setLastFinishedRun(previous.pomodoroSessionId);
         refresh();
+      }
       previousTimer.current = next;
       setClockOffset(new Date(next.serverTime).getTime() - Date.now());
       setTimer(next);
@@ -176,7 +184,9 @@ export function useWorkspace() {
     setFilter({ period: 'week', status: '', offset: 0 });
     setLoadError(null);
     demoRun.current = null;
+    demoResults.current.clear();
     previousTimer.current = null;
+    setLastFinishedRun(null);
     setActionErrors({});
     setLoading(false);
     setMembershipLoading(false);
@@ -373,7 +383,8 @@ export function useWorkspace() {
         notify('Не удалось подтвердить вход. Войдите ещё раз.', 'error');
         return;
       }
-      if (!busy.current.has('timer')) notify(socketError(error).message, 'error');
+      if (!busy.current.has('timer') && !busy.current.has('participation'))
+        notify(socketError(error).message, 'error');
       if (
         error.code === 'NOT_IN_ROOM' ||
         error.code === 'ROOM_CLOSED' ||
@@ -429,7 +440,7 @@ export function useWorkspace() {
           setSessionTaskResult({ runId: focusRunId, roomId, token, value: null, error: true });
       });
     return () => controller.abort();
-  }, [token, focusRunId, roomId, revision]);
+  }, [token, focusRunId, roomId, revision, membershipRevision]);
 
   const sessionTask = !focusRunId
     ? null
@@ -641,6 +652,7 @@ export function useWorkspace() {
         setHistoryPage({ items: [], total: 0 });
         setHistoryStats(emptyStats);
         setHistoryRooms([]);
+        setLastFinishedRun(null);
         setFilter({ period: 'week', status: '', offset: 0 });
         setToken(result.accessToken);
         setLoading(true);
@@ -710,6 +722,14 @@ export function useWorkspace() {
                 : task,
             ),
           );
+          if (
+            status !== 'in_progress' &&
+            tasks.find((item) => item.id === id)?.status === 'in_progress' &&
+            timer?.status === 'idle'
+          )
+            setMembers((items) =>
+              items.map((member) => ({ ...member, ready: false, sessionStatus: 'waiting' })),
+            );
         } else {
           const task = await api<Task>(`/tasks/${id}`, token, {
             method: 'PATCH',
@@ -717,6 +737,14 @@ export function useWorkspace() {
           });
           if (currentToken.current === token)
             setTasks((items) => items.map((item) => (item.id === id ? task : item)));
+          if (
+            status !== 'in_progress' &&
+            tasks.find((item) => item.id === id)?.status === 'in_progress' &&
+            room &&
+            timer?.status === 'idle'
+          ) {
+            requestMembership();
+          }
         }
       },
       status === 'completed' ? 'Задача завершена. Отличная работа!' : undefined,
@@ -735,6 +763,16 @@ export function useWorkspace() {
             );
             if (demoRun.current?.taskId === id) demoRun.current.taskId = null;
           }
+          if (
+            tasks.find((item) => item.id === id)?.status === 'in_progress' &&
+            room &&
+            timer?.status === 'idle'
+          )
+            if (demo)
+              setMembers((items) =>
+                items.map((member) => ({ ...member, ready: false, sessionStatus: 'waiting' })),
+              );
+            else requestMembership();
         }
       },
       'Задача удалена. История сохранена.',
@@ -782,7 +820,7 @@ export function useWorkspace() {
       'room',
       async () => {
         if (!demo) await api<void>('/rooms/leave', token, { method: 'POST' });
-        else finishDemo('cancelled', timer);
+        else finishDemo('cancelled', timer, 'left_room');
         if (currentToken.current === token) {
           if (demo) {
             setRoom(null);
@@ -809,10 +847,16 @@ export function useWorkspace() {
       'Права владельца переданы.',
     );
 
-  function finishDemo(status: 'completed' | 'cancelled', state: Pomodoro | null) {
+  function finishDemo(
+    status: 'completed' | 'cancelled',
+    state: Pomodoro | null,
+    reason = status as 'completed' | 'cancelled' | 'left_focus' | 'left_room',
+  ) {
     const selected = demoRun.current;
     if (!selected || state?.phase !== 'focus') return;
     demoRun.current = null;
+    demoResults.current.set(selected.id, reason);
+    setLastFinishedRun(selected.id);
     const now = new Date().toISOString();
     const focusedSeconds =
       status === 'completed'
@@ -837,6 +881,86 @@ export function useWorkspace() {
       ...items,
     ]);
   }
+
+  const setReady = (ready: boolean) => participationCommand('ready', ready);
+  const leaveFocus = () => participationCommand('leave');
+  const participationCommand = (action: 'ready' | 'leave', ready?: boolean) =>
+    run('participation', async () => {
+      if (!room) throw new Error('Сначала войдите в комнату.');
+      if (demo) {
+        if (action === 'ready') {
+          if (ready && !tasks.some((task) => task.status === 'in_progress'))
+            throw new Error('Сначала выберите активную задачу.');
+          setMembers((items) =>
+            items.map((member) =>
+              member.userId === demoUser.id
+                ? { ...member, ready, sessionStatus: ready ? 'ready' : 'waiting' }
+                : member,
+            ),
+          );
+        } else {
+          if (!demoRun.current || timer?.phase !== 'focus')
+            throw new Error('Вы не участвуете в этом фокусе.');
+          finishDemo('cancelled', timer, 'left_focus');
+          setMembers((items) =>
+            items.map((member) =>
+              member.userId === demoUser.id ? { ...member, sessionStatus: 'left_early' } : member,
+            ),
+          );
+        }
+        return;
+      }
+      const client = socket.current;
+      if (!client?.connected || connection !== 'connected')
+        throw new Error('Нет соединения с комнатой.');
+      await new Promise<void>((resolve, reject) => {
+        const onException = (error: RealtimeError) => {
+          cleanup();
+          reject(socketError(error));
+        };
+        const cleanup = () => client.off('exception', onException);
+        client.once('exception', onException);
+        client
+          .timeout(8000)
+          .emit(
+            `pomodoro:${action}`,
+            { roomId: room.id, ...(action === 'ready' ? { ready } : {}) },
+            (error, value: Pomodoro | undefined) => {
+              cleanup();
+              if (error || !value) reject(new Error('Сервер не подтвердил действие.'));
+              else resolve();
+            },
+          );
+      });
+      if (currentToken.current === token) {
+        requestMembership();
+        if (action === 'leave') refresh();
+      }
+    });
+
+  const getSessionResults = async (runId: string): Promise<SessionResults> => {
+    if (!demo) return api<SessionResults>(`/history/sessions/${runId}/results`, token);
+    const record = records.find((item) => item.pomodoroSessionId === runId);
+    if (!record) throw new Error('Итоги ещё не готовы.');
+    return {
+      runId,
+      status: record.status,
+      startedAt: record.startedAt,
+      endedAt: record.endedAt,
+      participants: [
+        {
+          userId: demoUser.id,
+          username: demoUser.username,
+          taskTitle: record.taskTitle,
+          status: record.status,
+          finishReason: demoResults.current.get(runId) ?? null,
+          focusedSeconds: record.focusedSeconds,
+          xpEarned: 0,
+          coinsEarned: 0,
+        },
+      ],
+    };
+  };
 
   const command = (action: Command) =>
     run('timer', async () => {
@@ -883,6 +1007,10 @@ export function useWorkspace() {
       const state = timer ?? idleTimer(room.id);
       const now = new Date().toISOString();
       if (action === 'start' && state.status === 'idle') {
+        if (!members.find((member) => member.userId === demoUser.id)?.ready)
+          throw new Error('Сначала отметьте готовность.');
+        if (!tasks.some((task) => task.status === 'in_progress'))
+          throw new Error('Сначала выберите активную задачу.');
         const activeTask = tasks.find((task) => task.status === 'in_progress');
         const id = crypto.randomUUID();
         demoRun.current = {
@@ -892,6 +1020,14 @@ export function useWorkspace() {
           taskTitle: activeTask?.title ?? null,
           planned: 1500,
         };
+        setMembers((items) =>
+          items.map((member) => ({
+            ...member,
+            ready: false,
+            sessionStatus: 'focusing',
+            taskTitle: activeTask?.title ?? null,
+          })),
+        );
         setTimer({
           ...state,
           pomodoroSessionId: id,
@@ -925,6 +1061,14 @@ export function useWorkspace() {
         });
       } else if (action === 'cancel') {
         finishDemo('cancelled', state);
+        setMembers((items) =>
+          items.map((member) => ({
+            ...member,
+            ready: false,
+            sessionStatus: 'waiting',
+            taskTitle: null,
+          })),
+        );
         setTimer(idleTimer(room.id));
       }
     });
@@ -935,6 +1079,12 @@ export function useWorkspace() {
       if (remaining(timer, 0) > 0) return;
       if (timer.phase === 'focus') {
         finishDemo('completed', timer);
+        setMembers((items) =>
+          items.map((member) => ({
+            ...member,
+            sessionStatus: member.sessionStatus === 'left_early' ? 'left_early' : 'resting',
+          })),
+        );
         setTimer({
           ...timer,
           status: 'running',
@@ -945,7 +1095,17 @@ export function useWorkspace() {
           serverTime: new Date().toISOString(),
         });
         notify('Фокус завершён. Время на небольшой перерыв.');
-      } else setTimer(idleTimer(timer.roomId));
+      } else {
+        setTimer(idleTimer(timer.roomId));
+        setMembers((items) =>
+          items.map((member) => ({
+            ...member,
+            ready: false,
+            sessionStatus: 'waiting',
+            taskTitle: null,
+          })),
+        );
+      }
     }, 250);
     return () => window.clearInterval(interval);
     // The run snapshot lives in a ref and is consumed exactly once.
@@ -954,6 +1114,15 @@ export function useWorkspace() {
   const reconnect = () => {
     socket.current?.disconnect().connect();
     refresh();
+  };
+  const getShop = () => api<ShopState>('/shop', token);
+  const buyXpBooster = async (requestId: string) => {
+    const result = await api<ShopState>('/shop/xp-booster', token, {
+      method: 'POST',
+      body: { requestId },
+    });
+    if (currentToken.current === token) refresh();
+    return result;
   };
   return {
     demo,
@@ -964,6 +1133,7 @@ export function useWorkspace() {
     timer,
     sessionTask,
     sessionTaskError,
+    lastFinishedRun,
     connection,
     clockOffset,
     today,
@@ -997,6 +1167,11 @@ export function useWorkspace() {
     leaveRoom,
     transferOwner,
     command,
+    setReady,
+    leaveFocus,
+    getSessionResults,
+    getShop,
+    buyXpBooster,
   };
 }
 export type Workspace = ReturnType<typeof useWorkspace>;

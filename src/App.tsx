@@ -11,9 +11,11 @@ import { TaskEditor } from './components/TaskEditor';
 import { TaskList } from './components/TaskList';
 import { Timer } from './components/Timer';
 import { Village } from './components/Village';
-import { PixelAvatar } from './components/PixelAvatar';
 import { ActivityChart } from './components/ActivityChart';
 import { ProgressCard } from './components/ProgressCard';
+import { SessionPanel } from './components/SessionPanel';
+import { PixelAvatar } from './components/PixelAvatar';
+import { ShopModal } from './components/ShopModal';
 
 const navigation: { page: Page; icon: IconName; label: string }[] = [
   { page: 'focus', icon: 'focus', label: 'Мой фокус' },
@@ -36,6 +38,7 @@ export default function App() {
   const [taskEditor, setTaskEditor] = useState<Task | 'new' | null>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
   const { user, room, demo, tasks, today, notices } = workspace;
   const openTasks = tasks.filter((task) => task.status !== 'completed').length;
   const completedTasks = tasks.filter((task) => task.status === 'completed').length;
@@ -140,6 +143,13 @@ export default function App() {
         </nav>
         <div className="header-actions">
           <button
+            className="button secondary small shop-navigation"
+            onClick={() => setShopOpen(true)}
+          >
+            <Icon name="leaf" size={17} />
+            <span>Магазин</span>
+          </button>
+          <button
             className="button secondary small room-navigation"
             aria-label={room ? 'Управление комнатой' : 'Создать комнату или войти по коду'}
             onClick={() => setRoomOpen(true)}
@@ -159,7 +169,7 @@ export default function App() {
         </div>
       </header>
       <main id="main-content" tabIndex={-1} className={`main-content page-${page}`}>
-        <div className="page-heading">
+        {/* <div className="page-heading">
           <div>
             <div className="eyebrow">
               {page === 'focus'
@@ -185,7 +195,7 @@ export default function App() {
             <Icon name="sun" size={22} />
             {date}
           </span>
-        </div>
+        </div> */}
         {demo && (
           <div className="demo-banner">
             <span className="demo-tag">ДЕМО</span>
@@ -223,34 +233,7 @@ export default function App() {
             {page === 'focus' && (
               <>
                 <Village>
-                  <button className="village-room card" onClick={() => setRoomOpen(true)}>
-                    <span className="eyebrow">
-                      <span
-                        className={`tiny-dot ${workspace.connection === 'connected' || demo ? 'online' : ''}`}
-                      />
-                      {demo
-                        ? 'ДЕМО-КОМНАТА'
-                        : room && workspace.connection === 'connected'
-                          ? 'ВЫ В КОМНАТЕ'
-                          : room
-                            ? 'НЕТ СОЕДИНЕНИЯ'
-                            : 'ТВОЁ ПРОСТРАНСТВО'}
-                    </span>
-                    <strong>{room?.name || 'Добро пожаловать!'}</strong>
-                    <span className="village-room-bottom">
-                      <span className="avatar-group">
-                        {workspace.members.slice(0, 4).map((member, index) => (
-                          <PixelAvatar key={member.userId} name={member.username} index={index} />
-                        ))}
-                      </span>
-                      <span>
-                        {room
-                          ? `${workspace.members.length} / ${room.maxMembers} участников`
-                          : 'Создать или найти комнату'}
-                        <Icon name="chevron" size={14} />
-                      </span>
-                    </span>
-                  </button>
+                  <SessionPanel workspace={workspace} onRoom={() => setRoomOpen(true)} />
                   <div className="village-welcome">
                     <img
                       src="/art/sign.png"
@@ -265,7 +248,6 @@ export default function App() {
                     </p>
                   </div>
                   <Timer workspace={workspace} onRoom={() => setRoomOpen(true)} />
-                  <span className="world-caption">Жители деревни — декоративные персонажи</span>
                 </Village>
                 <div className="daily-stats">
                   <div>
@@ -355,6 +337,16 @@ export default function App() {
         ))}
       </div>
       {authOpen && <AuthModal workspace={workspace} onClose={() => setAuthOpen(false)} />}
+      {shopOpen && (
+        <ShopModal
+          workspace={workspace}
+          onClose={() => setShopOpen(false)}
+          onAuth={() => {
+            setShopOpen(false);
+            setAuthOpen(true);
+          }}
+        />
+      )}
       {roomOpen && (
         <RoomModal
           workspace={workspace}
